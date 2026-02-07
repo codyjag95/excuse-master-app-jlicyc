@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const FAVORITES_KEY = '@excuse_generator_favorites';
+const RATING_KEY_PREFIX = '@excuse_generator_rating_';
 const MAX_FAVORITES = 10;
 
 export interface FavoriteExcuse {
@@ -160,4 +161,56 @@ export async function clearAllFavorites(): Promise<boolean> {
 export async function getFavoritesCount(): Promise<number> {
   const favorites = await getFavorites();
   return favorites.length;
+}
+
+/**
+ * Hash excuse text to create a unique key for rating storage
+ */
+function hashExcuseText(text: string): string {
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    const char = text.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0; // Convert to 32bit integer
+  }
+  return Math.abs(hash).toString();
+}
+
+/**
+ * Save a rating for an excuse (1-5 stars)
+ */
+export async function saveRating(excuseText: string, rating: number): Promise<boolean> {
+  try {
+    const hash = hashExcuseText(excuseText);
+    const key = `${RATING_KEY_PREFIX}${hash}`;
+    await storage.setItem(key, rating.toString());
+    console.log('[Storage] Rating saved:', rating, 'for excuse hash:', hash);
+    return true;
+  } catch (error) {
+    console.error('[Storage] Failed to save rating:', error);
+    return false;
+  }
+}
+
+/**
+ * Get the rating for an excuse
+ * Returns null if no rating exists
+ */
+export async function getRating(excuseText: string): Promise<number | null> {
+  try {
+    const hash = hashExcuseText(excuseText);
+    const key = `${RATING_KEY_PREFIX}${hash}`;
+    const ratingStr = await storage.getItem(key);
+    
+    if (!ratingStr) {
+      return null;
+    }
+    
+    const rating = parseInt(ratingStr, 10);
+    console.log('[Storage] Rating loaded:', rating, 'for excuse hash:', hash);
+    return rating;
+  } catch (error) {
+    console.error('[Storage] Failed to get rating:', error);
+    return null;
+  }
 }

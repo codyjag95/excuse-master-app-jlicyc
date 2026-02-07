@@ -1,14 +1,14 @@
 
 import { Stack, router } from "expo-router";
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, useColorScheme, Pressable, Platform } from "react-native";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { colors } from "@/styles/commonStyles";
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSpring, withTiming, withSequence } from "react-native-reanimated";
 import { generateExcuse as apiGenerateExcuse, adjustExcuse as apiAdjustExcuse, getUltimateExcuse } from "@/utils/api";
 import Modal from "@/components/ui/Modal";
 import NoiseTexture from "@/components/NoiseTexture";
 import { IconSymbol } from "@/components/IconSymbol";
-import { saveFavorite, isFavorited, removeFavorite } from "@/utils/storage";
+import { saveFavorite, isFavorited, removeFavorite, saveRating, getRating } from "@/utils/storage";
 
 const SITUATIONS = [
   "Late to work",
@@ -54,6 +54,8 @@ export default function HomeScreen() {
   const [successModal, setSuccessModal] = useState({ visible: false, message: "" });
   const [isFavorite, setIsFavorite] = useState(false);
   const [limitModal, setLimitModal] = useState(false);
+  const [currentRating, setCurrentRating] = useState<number | null>(null);
+  const [showRatedMessage, setShowRatedMessage] = useState(false);
   
   const buttonScale = useSharedValue(1);
   const buttonRotation = useSharedValue(0);
@@ -61,6 +63,42 @@ export default function HomeScreen() {
   const speechBubbleScale = useSharedValue(0);
   const confettiOpacity = useSharedValue(0);
   const heartScale = useSharedValue(1);
+  const starScales = [
+    useSharedValue(1),
+    useSharedValue(1),
+    useSharedValue(1),
+    useSharedValue(1),
+    useSharedValue(1),
+  ];
+  
+  // Create animated styles for stars OUTSIDE of render
+  const star0AnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: starScales[0].value }],
+  }));
+  
+  const star1AnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: starScales[1].value }],
+  }));
+  
+  const star2AnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: starScales[2].value }],
+  }));
+  
+  const star3AnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: starScales[3].value }],
+  }));
+  
+  const star4AnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: starScales[4].value }],
+  }));
+  
+  const starAnimatedStyles = useMemo(() => [
+    star0AnimatedStyle,
+    star1AnimatedStyle,
+    star2AnimatedStyle,
+    star3AnimatedStyle,
+    star4AnimatedStyle,
+  ], [star0AnimatedStyle, star1AnimatedStyle, star2AnimatedStyle, star3AnimatedStyle, star4AnimatedStyle]);
   
   useEffect(() => {
     console.log("Excuse Generator 3000 initialized (Web)");
@@ -73,32 +111,56 @@ export default function HomeScreen() {
       -1,
       false
     );
-  }, []);
+  }, [buttonRotation]);
   
   useEffect(() => {
-    if (excuse) {
-      speechBubbleScale.value = withSpring(1, { damping: 10 });
-      checkFavoriteStatus();
-      
-      const warnings = [
-        `WARNING: This excuse has a ${believabilityRating}% believability rating`,
-        `FUN FACT: This excuse has been used ${usageCount} times today`,
-        `CAUTION: Use at your own risk!`,
-        `TIP: Confidence is key when delivering this excuse`,
-        `ALERT: May cause raised eyebrows`,
-      ];
-      const randomWarningText = warnings[Math.floor(Math.random() * warnings.length)];
-      setWarningText(randomWarningText);
-      setShowWarning(true);
-      
-      setTimeout(() => setShowWarning(false), 5000);
-    }
-  }, [excuse]);
+    const loadExcuseData = async () => {
+      if (excuse) {
+        speechBubbleScale.value = withSpring(1, { damping: 10 });
+        
+        const favorited = await isFavorited(excuse);
+        setIsFavorite(favorited);
+        
+        const rating = await getRating(excuse);
+        setCurrentRating(rating);
+        
+        const warnings = [
+          `WARNING: This excuse has a ${believabilityRating}% believability rating`,
+          `FUN FACT: This excuse has been used ${usageCount} times today`,
+          `CAUTION: Use at your own risk!`,
+          `TIP: Confidence is key when delivering this excuse`,
+          `ALERT: May cause raised eyebrows`,
+        ];
+        const randomWarningText = warnings[Math.floor(Math.random() * warnings.length)];
+        setWarningText(randomWarningText);
+        setShowWarning(true);
+        
+        setTimeout(() => setShowWarning(false), 5000);
+      } else {
+        setCurrentRating(null);
+      }
+    };
+    
+    loadExcuseData();
+  }, [excuse, believabilityRating, usageCount, speechBubbleScale]);
   
-  const checkFavoriteStatus = async () => {
+  const handleRateExcuse = async (rating: number) => {
     if (!excuse) return;
-    const favorited = await isFavorited(excuse);
-    setIsFavorite(favorited);
+    
+    console.log('Rating excuse (Web):', rating);
+    
+    starScales[rating - 1].value = withSequence(
+      withSpring(1.3),
+      withSpring(1)
+    );
+    
+    setCurrentRating(rating);
+    await saveRating(excuse, rating);
+    
+    setShowRatedMessage(true);
+    setTimeout(() => {
+      setShowRatedMessage(false);
+    }, 1500);
   };
   
   const handleToggleFavorite = async () => {
@@ -530,11 +592,61 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </Animated.View>
               
+              {currentRating && (
+                <View style={[styles.ratingBadge, { backgroundColor: colors.electricOrange }]}>
+                  <Text style={styles.ratingBadgeText}>
+                    ⭐ 
+                  </Text>
+                  <Text style={styles.ratingBadgeText}>
+                    {currentRating}
+                  </Text>
+                </View>
+              )}
+              
               <Text style={styles.excuseText}>
                 {excuse}
               </Text>
               <View style={styles.speechBubbleTriangle} />
             </Animated.View>
+          )}
+          
+          {excuse && (
+            <View style={styles.ratingSection}>
+              <Text style={[styles.ratingPrompt, { color: textColor }]}>
+                How believable is this excuse?
+              </Text>
+              <View style={styles.starRow}>
+                {[1, 2, 3, 4, 5].map((star, index) => {
+                  const isFilled = currentRating !== null && star <= currentRating;
+                  const starColor = isFilled ? colors.electricOrange : '#CCCCCC';
+                  const starIconName = isFilled ? 'star' : 'star-border';
+                  
+                  return (
+                    <Animated.View key={star} style={starAnimatedStyles[index]}>
+                      <TouchableOpacity
+                        onPress={() => handleRateExcuse(star)}
+                        style={styles.starButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name={isFilled ? "star.fill" : "star"}
+                          android_material_icon_name={starIconName}
+                          size={24}
+                          color={starColor}
+                        />
+                      </TouchableOpacity>
+                    </Animated.View>
+                  );
+                })}
+              </View>
+              
+              {showRatedMessage && (
+                <View style={[styles.ratedMessage, { backgroundColor: colors.electricOrange }]}>
+                  <Text style={styles.ratedMessageText}>
+                    Rated! ⭐
+                  </Text>
+                </View>
+              )}
+            </View>
           )}
           
           {excuse && (
@@ -795,6 +907,24 @@ const styles = StyleSheet.create({
     right: 15,
     zIndex: 10,
   },
+  ratingBadge: {
+    position: 'absolute',
+    top: 15,
+    left: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 10,
+    borderWidth: 2,
+    borderColor: colors.text,
+  },
+  ratingBadgeText: {
+    fontWeight: 'bold',
+    fontSize: 12,
+    color: colors.text,
+  },
   speechBubbleTriangle: {
     position: "absolute",
     bottom: -20,
@@ -814,6 +944,37 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 24,
     paddingRight: 40,
+  },
+  ratingSection: {
+    width: "100%",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  ratingPrompt: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
+  starRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  starButton: {
+    padding: 4,
+  },
+  ratedMessage: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: colors.text,
+  },
+  ratedMessageText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: colors.text,
   },
   shareButton: {
     flexDirection: "row",
