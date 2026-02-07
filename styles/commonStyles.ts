@@ -6,6 +6,7 @@ export const colors = {
   // Primary colors
   slimeGreen: '#39FF14',
   electricOrange: '#FF6600',
+  hotPink: '#FF1493', // Hot pink for favorites
   
   // Background colors - Updated to deep black/dark charcoal
   background: '#FFFEF0', // Cream (light mode)

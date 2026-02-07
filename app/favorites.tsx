@@ -7,24 +7,22 @@ import {
   ScrollView,
   TouchableOpacity,
   useColorScheme,
-  ActivityIndicator,
-  Alert,
+  Platform,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
+import { IconSymbol } from '@/components/IconSymbol';
 import NoiseTexture from '@/components/NoiseTexture';
 import Modal from '@/components/ui/Modal';
 import * as Haptics from 'expo-haptics';
+import * as Sharing from 'expo-sharing';
+import * as Clipboard from 'expo-clipboard';
 import {
   getFavorites,
   removeFavorite,
   clearAllFavorites,
-  getDeviceId,
-  generateExcuse,
   type FavoriteExcuse,
-} from '@/utils/api';
-import { IconSymbol } from '@/components/IconSymbol';
-import * as Sharing from 'expo-sharing';
+} from '@/utils/storage';
 
 export default function FavoritesScreen() {
   const colorScheme = useColorScheme();
@@ -32,10 +30,10 @@ export default function FavoritesScreen() {
   
   const [favorites, setFavorites] = useState<FavoriteExcuse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deviceId, setDeviceId] = useState('');
-  const [errorModal, setErrorModal] = useState({ visible: false, message: '' });
+  const [deleteModal, setDeleteModal] = useState({ visible: false, id: '', excuse: '' });
+  const [clearAllModal, setClearAllModal] = useState(false);
   const [successModal, setSuccessModal] = useState({ visible: false, message: '' });
-  const [confirmModal, setConfirmModal] = useState({ visible: false, message: '', onConfirm: () => {} });
+  const [errorModal, setErrorModal] = useState({ visible: false, message: '' });
   
   useEffect(() => {
     loadFavorites();
@@ -45,9 +43,7 @@ export default function FavoritesScreen() {
     console.log('Loading favorites');
     setLoading(true);
     try {
-      const id = await getDeviceId();
-      setDeviceId(id);
-      const favs = await getFavorites(id);
+      const favs = await getFavorites();
       setFavorites(favs);
       console.log('Favorites loaded:', favs.length);
     } catch (error) {
@@ -61,101 +57,203 @@ export default function FavoritesScreen() {
     }
   };
   
-  const handleDelete = async (excuseId: string) => {
-    console.log('Deleting favorite:', excuseId);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const handleDelete = async (id: string) => {
+    console.log('Deleting favorite:', id);
     
-    try {
-      await removeFavorite(excuseId, deviceId);
-      setFavorites(prev => prev.filter(f => f.excuseId !== excuseId));
-      setSuccessModal({
-        visible: true,
-        message: 'Favorite removed! 💔',
-      });
-    } catch (error) {
-      console.error('Failed to delete favorite:', error);
-      setErrorModal({
-        visible: true,
-        message: 'Failed to remove favorite. Please try again.',
-      });
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-  };
-  
-  const handleClearAll = () => {
-    console.log('Clear all favorites requested');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
-    setConfirmModal({
-      visible: true,
-      message: 'Are you sure you want to clear all favorites? This cannot be undone.',
-      onConfirm: async () => {
-        try {
-          const result = await clearAllFavorites(deviceId);
-          setFavorites([]);
-          setSuccessModal({
-            visible: true,
-            message: `Cleared ${result.deletedCount} favorites! 🧹`,
-          });
-        } catch (error) {
-          console.error('Failed to clear favorites:', error);
-          setErrorModal({
-            visible: true,
-            message: 'Failed to clear favorites. Please try again.',
-          });
-        }
-      },
-    });
-  };
-  
-  const handleRegenerateSimilar = async (fav: FavoriteExcuse) => {
-    console.log('Regenerating similar excuse for:', fav.excuseId);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const success = await removeFavorite(id);
     
-    try {
-      await generateExcuse({
-        situation: fav.situation,
-        tone: fav.tone,
-        length: fav.length,
-      });
-      
+    if (success) {
+      setFavorites(prev => prev.filter(fav => fav.id !== id));
       setSuccessModal({
         visible: true,
-        message: 'New excuse generated! Check the home screen.',
+        message: 'Excuse deleted! 🗑️',
       });
       
       setTimeout(() => {
-        router.back();
-      }, 1500);
-    } catch (error) {
-      console.error('Failed to regenerate excuse:', error);
+        setSuccessModal({ visible: false, message: '' });
+      }, 2000);
+    } else {
       setErrorModal({
         visible: true,
-        message: 'Failed to generate new excuse. Please try again.',
+        message: 'Failed to delete excuse. Please try again.',
+      });
+    }
+    
+    setDeleteModal({ visible: false, id: '', excuse: '' });
+  };
+  
+  const handleClearAll = async () => {
+    console.log('Clearing all favorites');
+    
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
+    
+    const success = await clearAllFavorites();
+    
+    if (success) {
+      setFavorites([]);
+      setSuccessModal({
+        visible: true,
+        message: 'All favorites cleared! 🧹',
+      });
+      
+      setTimeout(() => {
+        setSuccessModal({ visible: false, message: '' });
+      }, 2000);
+    } else {
+      setErrorModal({
+        visible: true,
+        message: 'Failed to clear favorites. Please try again.',
+      });
+    }
+    
+    setClearAllModal(false);
+  };
+  
+  const handleShare = async (excuse: string) => {
+    console.log('Sharing favorite excuse');
+    
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    
+    const shareText = `${excuse} - Generated by Excuse Generator 3000`;
+    
+    try {
+      if (Platform.OS === 'web') {
+        // Web Share API
+        if (navigator.share) {
+          await navigator.share({
+            title: 'Excuse Generator 3000',
+            text: shareText,
+          });
+        } else {
+          await navigator.clipboard.writeText(shareText);
+          setSuccessModal({
+            visible: true,
+            message: 'Excuse copied to clipboard!',
+          });
+          
+          setTimeout(() => {
+            setSuccessModal({ visible: false, message: '' });
+          }, 2000);
+        }
+      } else {
+        // Mobile native share
+        const isAvailable = await Sharing.isAvailableAsync();
+        
+        if (isAvailable) {
+          await Sharing.shareAsync('data:text/plain,' + encodeURIComponent(shareText));
+        } else {
+          await Clipboard.setStringAsync(shareText);
+          setSuccessModal({
+            visible: true,
+            message: 'Excuse copied to clipboard!',
+          });
+          
+          setTimeout(() => {
+            setSuccessModal({ visible: false, message: '' });
+          }, 2000);
+        }
+      }
+    } catch (error: any) {
+      console.error('Failed to share:', error);
+      
+      // If user cancelled, don't show error
+      if (error.message?.includes('cancel') || error.name === 'AbortError') {
+        console.log('User cancelled share');
+        return;
+      }
+      
+      // Fallback to clipboard
+      try {
+        if (Platform.OS === 'web') {
+          await navigator.clipboard.writeText(shareText);
+        } else {
+          await Clipboard.setStringAsync(shareText);
+        }
+        
+        setSuccessModal({
+          visible: true,
+          message: 'Excuse copied to clipboard!',
+        });
+        
+        setTimeout(() => {
+          setSuccessModal({ visible: false, message: '' });
+        }, 2000);
+      } catch (clipboardError) {
+        console.error('Failed to copy to clipboard:', clipboardError);
+      }
+    }
+  };
+  
+  const handleCopy = async (excuse: string) => {
+    console.log('Copying excuse to clipboard');
+    
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    
+    try {
+      if (Platform.OS === 'web') {
+        await navigator.clipboard.writeText(excuse);
+      } else {
+        await Clipboard.setStringAsync(excuse);
+      }
+      
+      setSuccessModal({
+        visible: true,
+        message: 'Excuse copied! 📋',
+      });
+      
+      setTimeout(() => {
+        setSuccessModal({ visible: false, message: '' });
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      setErrorModal({
+        visible: true,
+        message: 'Failed to copy excuse. Please try again.',
       });
     }
   };
   
-  const handleShare = async (excuse: string) => {
-    console.log('Sharing excuse from favorites');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const formatTimestamp = (timestamp: number): string => {
+    const now = Date.now();
+    const diff = now - timestamp;
     
-    try {
-      const isAvailable = await Sharing.isAvailableAsync();
-      if (isAvailable) {
-        await Sharing.shareAsync('data:text/plain;base64,' + btoa(excuse));
-      }
-    } catch (error) {
-      console.error('Failed to share:', error);
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (seconds < 60) {
+      return 'just now';
     }
-  };
-  
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+    if (minutes < 60) {
+      const minuteText = minutes === 1 ? 'minute' : 'minutes';
+      return `${minutes} ${minuteText} ago`;
+    }
+    if (hours < 24) {
+      const hourText = hours === 1 ? 'hour' : 'hours';
+      return `${hours} ${hourText} ago`;
+    }
+    if (days === 1) {
+      return 'yesterday';
+    }
+    if (days < 7) {
+      return `${days} days ago`;
+    }
+    
+    const date = new Date(timestamp);
+    const monthText = date.toLocaleDateString('en-US', { month: 'short' });
+    const dayText = date.getDate();
+    return `${monthText} ${dayText}`;
   };
   
   const bgColor = isDark ? colors.backgroundDark : colors.background;
@@ -172,147 +270,183 @@ export default function FavoritesScreen() {
           headerStyle: {
             backgroundColor: bgColor,
           },
-          headerTintColor: colors.electricOrange,
+          headerTintColor: colors.hotPink,
           headerTitleStyle: {
             fontWeight: 'bold',
-            fontSize: 20,
+            fontSize: 18,
           },
+          headerBackTitle: 'Back',
         }}
       />
       <View style={[styles.container, { backgroundColor: bgColor }]}>
         {isDark && <NoiseTexture opacity={0.04} />}
         
         {loading ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color={colors.slimeGreen} />
+          <View style={styles.centerContent}>
             <Text style={[styles.loadingText, { color: textColor }]}>
               Loading favorites...
             </Text>
           </View>
         ) : favorites.length === 0 ? (
-          <View style={styles.emptyState}>
+          <View style={styles.centerContent}>
             <Text style={styles.emptyIcon}>
-              💚
+              ❤️
             </Text>
             <Text style={[styles.emptyTitle, { color: textColor }]}>
-              No excuses saved yet!
+              No excuses saved yet! 💚
             </Text>
-            <Text style={[styles.emptyMessage, { color: textSecondaryColor }]}>
-              Tap the heart on any excuse to save it for later
+            <Text style={[styles.emptySubtitle, { color: textSecondaryColor }]}>
+              Tap the ❤️ on any excuse to save it for later
             </Text>
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={[styles.backButton, { backgroundColor: colors.slimeGreen }]}
-            >
-              <Text style={styles.backButtonText}>
-                GO GENERATE SOME EXCUSES
-              </Text>
-            </TouchableOpacity>
           </View>
         ) : (
-          <>
-            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-              {favorites.map((fav, index) => {
-                const ratingDisplay = fav.averageRating > 0 ? `⭐ ${fav.averageRating.toFixed(1)}` : 'Not rated';
-                const dateDisplay = formatDate(fav.createdAt);
-                
-                return (
-                  <View key={index} style={[styles.favoriteCard, { backgroundColor: colors.slimeGreen }]}>
-                    <View style={styles.favoriteHeader}>
-                      <Text style={styles.favoriteRating}>
-                        {ratingDisplay}
-                      </Text>
-                      <Text style={styles.favoriteDate}>
-                        {dateDisplay}
-                      </Text>
-                    </View>
-                    
-                    <Text style={styles.favoriteExcuse}>
-                      {fav.excuse}
-                    </Text>
-                    
-                    <View style={styles.favoriteSettings}>
-                      <Text style={styles.favoriteSettingText}>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+          >
+            {favorites.map((fav, index) => {
+              const timeAgo = formatTimestamp(fav.timestamp);
+              
+              return (
+                <View key={fav.id} style={[styles.favoriteCard, { backgroundColor: colors.slimeGreen }]}>
+                  <Text style={styles.excuseText}>
+                    {fav.excuse}
+                  </Text>
+                  
+                  <View style={styles.tagsContainer}>
+                    <View style={[styles.tag, { backgroundColor: cardColor }]}>
+                      <Text style={[styles.tagText, { color: textColor }]}>
                         {fav.situation}
                       </Text>
-                      <Text style={styles.favoriteSettingText}>
-                        •
-                      </Text>
-                      <Text style={styles.favoriteSettingText}>
+                    </View>
+                    <View style={[styles.tag, { backgroundColor: cardColor }]}>
+                      <Text style={[styles.tagText, { color: textColor }]}>
                         {fav.tone}
                       </Text>
-                      <Text style={styles.favoriteSettingText}>
-                        •
-                      </Text>
-                      <Text style={styles.favoriteSettingText}>
+                    </View>
+                    <View style={[styles.tag, { backgroundColor: cardColor }]}>
+                      <Text style={[styles.tagText, { color: textColor }]}>
                         {fav.length}
                       </Text>
                     </View>
-                    
-                    <View style={styles.favoriteActions}>
-                      <TouchableOpacity
-                        onPress={() => handleShare(fav.excuse)}
-                        style={[styles.favoriteActionButton, { backgroundColor: colors.electricOrange }]}
-                      >
-                        <IconSymbol
-                          ios_icon_name="square.and.arrow.up"
-                          android_material_icon_name="share"
-                          size={18}
-                          color={colors.text}
-                        />
-                        <Text style={styles.favoriteActionText}>
-                          Share
-                        </Text>
-                      </TouchableOpacity>
-                      
-                      <TouchableOpacity
-                        onPress={() => handleRegenerateSimilar(fav)}
-                        style={[styles.favoriteActionButton, { backgroundColor: colors.accent }]}
-                      >
-                        <IconSymbol
-                          ios_icon_name="arrow.clockwise"
-                          android_material_icon_name="refresh"
-                          size={18}
-                          color={colors.text}
-                        />
-                        <Text style={styles.favoriteActionText}>
-                          Re-generate
-                        </Text>
-                      </TouchableOpacity>
-                      
-                      <TouchableOpacity
-                        onPress={() => handleDelete(fav.excuseId)}
-                        style={[styles.favoriteActionButton, { backgroundColor: cardColor }]}
-                      >
-                        <IconSymbol
-                          ios_icon_name="trash"
-                          android_material_icon_name="delete"
-                          size={18}
-                          color={textColor}
-                        />
-                        <Text style={[styles.favoriteActionText, { color: textColor }]}>
-                          Delete
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
                   </View>
-                );
-              })}
-            </ScrollView>
+                  
+                  <Text style={[styles.timestamp, { color: textSecondaryColor }]}>
+                    {timeAgo}
+                  </Text>
+                  
+                  <View style={styles.actionButtons}>
+                    <TouchableOpacity
+                      onPress={() => handleShare(fav.excuse)}
+                      style={[styles.actionButton, { backgroundColor: colors.electricOrange }]}
+                    >
+                      <IconSymbol
+                        ios_icon_name="square.and.arrow.up"
+                        android_material_icon_name="share"
+                        size={18}
+                        color={colors.text}
+                      />
+                      <Text style={styles.actionButtonText}>
+                        SHARE
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      onPress={() => handleCopy(fav.excuse)}
+                      style={[styles.actionButton, { backgroundColor: colors.accent }]}
+                    >
+                      <IconSymbol
+                        ios_icon_name="doc.on.doc"
+                        android_material_icon_name="content-copy"
+                        size={18}
+                        color={colors.text}
+                      />
+                      <Text style={styles.actionButtonText}>
+                        COPY
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      onPress={() => {
+                        setDeleteModal({
+                          visible: true,
+                          id: fav.id,
+                          excuse: fav.excuse,
+                        });
+                      }}
+                      style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
+                    >
+                      <IconSymbol
+                        ios_icon_name="trash"
+                        android_material_icon_name="delete"
+                        size={18}
+                        color={colors.text}
+                      />
+                      <Text style={styles.actionButtonText}>
+                        DELETE
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
             
-            <View style={styles.footer}>
+            {favorites.length > 0 && (
               <TouchableOpacity
-                onPress={handleClearAll}
-                style={[styles.clearButton, { backgroundColor: cardColor }]}
+                onPress={() => setClearAllModal(true)}
+                style={[styles.clearAllButton, { backgroundColor: '#FF3B30' }]}
               >
-                <Text style={[styles.clearButtonText, { color: textColor }]}>
+                <IconSymbol
+                  ios_icon_name="trash.fill"
+                  android_material_icon_name="delete"
+                  size={20}
+                  color={colors.text}
+                />
+                <Text style={styles.clearAllButtonText}>
                   CLEAR ALL FAVORITES
                 </Text>
               </TouchableOpacity>
-            </View>
-          </>
+            )}
+            
+            <View style={{ height: 40 }} />
+          </ScrollView>
         )}
         
+        {/* Delete Confirmation Modal */}
+        <Modal
+          visible={deleteModal.visible}
+          onClose={() => setDeleteModal({ visible: false, id: '', excuse: '' })}
+          title="Delete this excuse?"
+          message="This action cannot be undone."
+          type="warning"
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={() => handleDelete(deleteModal.id)}
+        />
+        
+        {/* Clear All Confirmation Modal */}
+        <Modal
+          visible={clearAllModal}
+          onClose={() => setClearAllModal(false)}
+          title="Delete all saved excuses?"
+          message="This will permanently delete all your favorites. This action cannot be undone."
+          type="warning"
+          confirmText="Delete All"
+          cancelText="Cancel"
+          onConfirm={handleClearAll}
+        />
+        
+        {/* Success Modal */}
+        <Modal
+          visible={successModal.visible}
+          onClose={() => setSuccessModal({ visible: false, message: '' })}
+          title="Success!"
+          message={successModal.message}
+          type="success"
+          confirmText="OK"
+        />
+        
+        {/* Error Modal */}
         <Modal
           visible={errorModal.visible}
           onClose={() => setErrorModal({ visible: false, message: '' })}
@@ -320,26 +454,6 @@ export default function FavoritesScreen() {
           message={errorModal.message}
           type="error"
           confirmText="OK"
-        />
-        
-        <Modal
-          visible={successModal.visible}
-          onClose={() => setSuccessModal({ visible: false, message: '' })}
-          title="Success!"
-          message={successModal.message}
-          type="success"
-          confirmText="Awesome!"
-        />
-        
-        <Modal
-          visible={confirmModal.visible}
-          onClose={() => setConfirmModal({ visible: false, message: '', onConfirm: () => {} })}
-          title="Confirm"
-          message={confirmModal.message}
-          type="warning"
-          confirmText="Yes, Clear All"
-          cancelText="Cancel"
-          onConfirm={confirmModal.onConfirm}
         />
       </View>
     </>
@@ -350,136 +464,121 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  emptyState: {
+  centerContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   emptyIcon: {
     fontSize: 80,
     marginBottom: 20,
   },
   emptyTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 12,
+    marginBottom: 10,
     textAlign: 'center',
   },
-  emptyMessage: {
+  emptySubtitle: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 30,
-  },
-  backButton: {
-    paddingHorizontal: 30,
-    paddingVertical: 16,
-    borderRadius: 12,
-    borderWidth: 3,
-    borderColor: colors.text,
-  },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
+    lineHeight: 24,
   },
   scrollView: {
     flex: 1,
+    zIndex: 2,
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 100,
+    padding: 20,
   },
   favoriteCard: {
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 16,
-    borderWidth: 3,
+    padding: 20,
+    borderRadius: 20,
+    marginBottom: 20,
+    borderWidth: 4,
     borderColor: colors.text,
+    shadowColor: colors.text,
+    shadowOffset: { width: 6, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
   },
-  favoriteHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  favoriteRating: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  favoriteDate: {
-    fontSize: 12,
+  excuseText: {
+    fontSize: 16,
     fontWeight: '600',
     color: colors.text,
+    lineHeight: 24,
+    marginBottom: 15,
   },
-  favoriteExcuse: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-    lineHeight: 22,
-    marginBottom: 12,
-  },
-  favoriteSettings: {
+  tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 12,
+    gap: 8,
+    marginBottom: 10,
   },
-  favoriteSettingText: {
+  tag: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.text,
+  },
+  tagText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  timestamp: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.text,
+    marginBottom: 15,
   },
-  favoriteActions: {
+  actionButtons: {
     flexDirection: 'row',
     gap: 8,
   },
-  favoriteActionButton: {
+  actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    borderWidth: 2,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 3,
     borderColor: colors.text,
-    gap: 4,
+    gap: 6,
   },
-  favoriteActionText: {
+  actionButtonText: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: colors.text,
   },
-  footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-    borderTopWidth: 2,
-    borderTopColor: colors.text,
-  },
-  clearButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.text,
+  clearAllButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginTop: 10,
+    borderWidth: 4,
+    borderColor: colors.text,
+    shadowColor: colors.text,
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
+    gap: 10,
   },
-  clearButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
+  clearAllButtonText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.text,
+    letterSpacing: 1,
   },
 });
