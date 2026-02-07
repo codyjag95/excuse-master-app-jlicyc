@@ -1,0 +1,280 @@
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { gateway } from '@specific-dev/framework';
+import { generateText } from 'ai';
+import { eq, count } from 'drizzle-orm';
+import * as schema from '../db/schema.js';
+import type { App } from '../index.js';
+
+interface GenerateExcuseBody {
+  situation: string;
+  tone: string;
+  length: string;
+}
+
+interface AdjustExcuseBody {
+  originalExcuse: string;
+  situation: string;
+  tone: string;
+  length: string;
+  direction: 'better' | 'worse';
+}
+
+interface ExcuseResponse {
+  excuse: string;
+  believabilityRating: number;
+  usageCount?: number;
+}
+
+export function register(app: App, fastify: FastifyInstance) {
+  fastify.post<{ Body: GenerateExcuseBody }>(
+    '/api/excuses/generate',
+    {
+      schema: {
+        description: 'Generate a creative excuse based on situation, tone, and length',
+        tags: ['excuses'],
+        body: {
+          type: 'object',
+          required: ['situation', 'tone', 'length'],
+          properties: {
+            situation: { type: 'string', description: 'The situation (e.g., "Late to work")' },
+            tone: { type: 'string', description: 'The tone (e.g., "Believable", "Absurd")' },
+            length: { type: 'string', description: 'The length (e.g., "Quick one-liner")' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              excuse: { type: 'string' },
+              believabilityRating: { type: 'number' },
+              usageCount: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: GenerateExcuseBody }>, reply: FastifyReply) => {
+      const { situation, tone, length } = request.body;
+
+      app.logger.info({ situation, tone, length }, 'Generating excuse');
+
+      try {
+        const systemPrompt = `You are a creative excuse generator. Generate witty, contextual excuses based on the user's specifications.
+Include a believability rating (0-100) at the end of your response in the format "BELIEVABILITY: [number]".
+Make sure the excuse matches the requested tone and length.`;
+
+        const userPrompt = `Generate an excuse for the following:
+Situation: ${situation}
+Tone: ${tone}
+Length: ${length}
+
+Provide a creative excuse that fits these parameters. End with "BELIEVABILITY: [0-100]" where you rate how believable the excuse is.`;
+
+        const { text } = await generateText({
+          model: gateway('openai/gpt-5.2'),
+          system: systemPrompt,
+          prompt: userPrompt,
+        });
+
+        // Parse the response to extract excuse and believability rating
+        const believabilityMatch = text.match(/BELIEVABILITY:\s*(\d+)/i);
+        const believabilityRating = believabilityMatch ? parseInt(believabilityMatch[1], 10) : 50;
+        const excuse = text.replace(/BELIEVABILITY:\s*\d+/i, '').trim();
+
+        // Save to database
+        const [saved] = await app.db
+          .insert(schema.excuses)
+          .values({
+            situation,
+            tone,
+            length,
+            excuse,
+            believabilityRating,
+          })
+          .returning();
+
+        // Count how many times this excuse has been used (all excuses for this situation)
+        const [{ usageCount }] = await app.db
+          .select({ usageCount: count() })
+          .from(schema.excuses)
+          .where(eq(schema.excuses.situation, situation));
+
+        app.logger.info(
+          { excuseId: saved.id, situation, believabilityRating },
+          'Excuse generated successfully'
+        );
+
+        const response: ExcuseResponse = {
+          excuse,
+          believabilityRating,
+          usageCount: usageCount as number,
+        };
+
+        return response;
+      } catch (error) {
+        app.logger.error({ err: error, situation, tone, length }, 'Failed to generate excuse');
+        throw error;
+      }
+    }
+  );
+
+  fastify.post<{ Body: AdjustExcuseBody }>(
+    '/api/excuses/adjust',
+    {
+      schema: {
+        description: 'Adjust an existing excuse to be more or less believable',
+        tags: ['excuses'],
+        body: {
+          type: 'object',
+          required: ['originalExcuse', 'situation', 'tone', 'length', 'direction'],
+          properties: {
+            originalExcuse: { type: 'string', description: 'The original excuse to adjust' },
+            situation: { type: 'string' },
+            tone: { type: 'string' },
+            length: { type: 'string' },
+            direction: { type: 'string', enum: ['better', 'worse'] },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              excuse: { type: 'string' },
+              believabilityRating: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: AdjustExcuseBody }>, reply: FastifyReply) => {
+      const { originalExcuse, situation, tone, length, direction } = request.body;
+
+      app.logger.info(
+        { situation, direction, originalExcuse: originalExcuse.substring(0, 50) },
+        'Adjusting excuse'
+      );
+
+      try {
+        const directionText = direction === 'better' ? 'more believable and realistic' : 'more absurd and over-the-top';
+
+        const systemPrompt = `You are an expert at refining excuses. Take an existing excuse and make it ${directionText}.
+Include a believability rating (0-100) at the end of your response in the format "BELIEVABILITY: [number]".`;
+
+        const userPrompt = `Original excuse: "${originalExcuse}"
+
+Situation: ${situation}
+Tone: ${tone}
+Length: ${length}
+Direction: Make it ${directionText}
+
+Refine this excuse while maintaining the specified tone and length. End with "BELIEVABILITY: [0-100]".`;
+
+        const { text } = await generateText({
+          model: gateway('openai/gpt-5.2'),
+          system: systemPrompt,
+          prompt: userPrompt,
+        });
+
+        // Parse the response to extract excuse and believability rating
+        const believabilityMatch = text.match(/BELIEVABILITY:\s*(\d+)/i);
+        const believabilityRating = believabilityMatch ? parseInt(believabilityMatch[1], 10) : 50;
+        const adjustedExcuse = text.replace(/BELIEVABILITY:\s*\d+/i, '').trim();
+
+        // Save adjusted excuse to database
+        const [saved] = await app.db
+          .insert(schema.excuses)
+          .values({
+            situation,
+            tone,
+            length,
+            excuse: adjustedExcuse,
+            believabilityRating,
+          })
+          .returning();
+
+        app.logger.info(
+          { excuseId: saved.id, direction, believabilityRating },
+          'Excuse adjusted successfully'
+        );
+
+        const response: ExcuseResponse = {
+          excuse: adjustedExcuse,
+          believabilityRating,
+        };
+
+        return response;
+      } catch (error) {
+        app.logger.error(
+          { err: error, situation, direction, originalExcuse: originalExcuse.substring(0, 50) },
+          'Failed to adjust excuse'
+        );
+        throw error;
+      }
+    }
+  );
+
+  fastify.get(
+    '/api/excuses/ultimate',
+    {
+      schema: {
+        description: 'Get the ultimate Easter egg excuse',
+        tags: ['excuses'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              excuse: { type: 'string' },
+              believabilityRating: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      app.logger.info('Fetching ultimate excuse');
+
+      try {
+        const systemPrompt =
+          'You are a comedic genius. Generate the most absurdly hilarious, over-the-top excuse that could never be believed. Make it creative and wildly entertaining. Include a believability rating (0-100) at the end in the format "BELIEVABILITY: [number]".';
+
+        const userPrompt =
+          'Generate the ultimate, most ridiculous excuse imaginable. This should be a comedic masterpiece that is hilariously unbelievable. End with "BELIEVABILITY: [0-100]".';
+
+        const { text } = await generateText({
+          model: gateway('openai/gpt-5.2'),
+          system: systemPrompt,
+          prompt: userPrompt,
+        });
+
+        // Parse the response to extract excuse and believability rating
+        const believabilityMatch = text.match(/BELIEVABILITY:\s*(\d+)/i);
+        const believabilityRating = believabilityMatch ? parseInt(believabilityMatch[1], 10) : 0;
+        const excuse = text.replace(/BELIEVABILITY:\s*\d+/i, '').trim();
+
+        // Save ultimate excuse to database with special markers
+        const [saved] = await app.db
+          .insert(schema.excuses)
+          .values({
+            situation: 'ULTIMATE_EASTER_EGG',
+            tone: 'Absurd',
+            length: 'Elaborate story',
+            excuse,
+            believabilityRating,
+          })
+          .returning();
+
+        app.logger.info({ excuseId: saved.id }, 'Ultimate excuse generated');
+
+        const response: ExcuseResponse = {
+          excuse,
+          believabilityRating,
+        };
+
+        return response;
+      } catch (error) {
+        app.logger.error({ err: error }, 'Failed to generate ultimate excuse');
+        throw error;
+      }
+    }
+  );
+}

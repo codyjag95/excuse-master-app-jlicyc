@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1770466729017,
+      "tag": "20260207121849_workable_sleepwalker",
+      "breakpoints": true
+    }
+  ]
+}
