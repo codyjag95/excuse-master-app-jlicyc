@@ -1,6 +1,6 @@
 
 import { Stack, router } from "expo-router";
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, useColorScheme, Pressable, Platform } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, useColorScheme, Pressable } from "react-native";
 import React, { useState, useEffect, useMemo } from "react";
 import { colors } from "@/styles/commonStyles";
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSpring, withTiming, withSequence } from "react-native-reanimated";
@@ -755,8 +755,6 @@ export default function HomeScreen() {
               🎉 🎊 ✨ 🎉 🎊 ✨
             </Text>
           </Animated.View>
-          
-          <View style={{ height: 40 }} />
         </ScrollView>
         
         <Modal
