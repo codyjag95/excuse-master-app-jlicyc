@@ -1,5 +1,5 @@
 
-import { Stack, router } from "expo-router";
+import { Stack } from "expo-router";
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, useColorScheme, Pressable } from "react-native";
 import React, { useState, useEffect, useMemo } from "react";
 import { colors } from "@/styles/commonStyles";
@@ -445,19 +445,6 @@ export default function HomeScreen() {
             fontWeight: 'bold',
             fontSize: 16,
           },
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={() => {
-                console.log('Navigating to favorites');
-                router.push('/favorites');
-              }}
-              style={styles.favoritesButton}
-            >
-              <Text style={styles.favoritesButtonText}>
-                MY FAVORITES ❤️
-              </Text>
-            </TouchableOpacity>
-          ),
         }}
       />
       <View style={[styles.container, { backgroundColor: bgColor }]}>
@@ -800,16 +787,6 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 20,
     alignItems: "center",
-  },
-  favoritesButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginRight: 10,
-  },
-  favoritesButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: colors.hotPink,
   },
   titleContainer: {
     alignItems: "center",
