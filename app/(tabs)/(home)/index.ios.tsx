@@ -1,18 +1,11 @@
 
-import { Stack, router } from "expo-router";
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, useColorScheme, Pressable } from "react-native";
-import React, { useState, useEffect, useMemo } from "react";
+import { Stack } from "expo-router";
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, useColorScheme, Pressable, Clipboard } from "react-native";
+import React, { useState, useEffect } from "react";
 import { colors } from "@/styles/commonStyles";
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSpring, withTiming, withSequence } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
-import * as Sharing from "expo-sharing";
-import * as Clipboard from "expo-clipboard";
-import { generateExcuse as apiGenerateExcuse, adjustExcuse as apiAdjustExcuse, getUltimateExcuse } from "@/utils/api";
-import Modal from "@/components/ui/Modal";
 import NoiseTexture from "@/components/NoiseTexture";
-import { IconSymbol } from "@/components/IconSymbol";
-import { saveFavorite, isFavorited, removeFavorite, saveRating, getRating } from "@/utils/storage";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SITUATIONS = [
   "Late to work",
@@ -41,7 +34,6 @@ const LENGTHS = [
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
-  const insets = useSafeAreaInsets();
   
   const [situation, setSituation] = useState(SITUATIONS[0]);
   const [tone, setTone] = useState(TONES[0]);
@@ -55,55 +47,13 @@ export default function HomeScreen() {
   const [titleClickCount, setTitleClickCount] = useState(0);
   const [showWarning, setShowWarning] = useState(false);
   const [warningText, setWarningText] = useState("");
-  const [errorModal, setErrorModal] = useState({ visible: false, message: "" });
-  const [successModal, setSuccessModal] = useState({ visible: false, message: "" });
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [limitModal, setLimitModal] = useState(false);
-  const [currentRating, setCurrentRating] = useState<number | null>(null);
-  const [showRatedMessage, setShowRatedMessage] = useState(false);
   
+  // Animations
   const buttonScale = useSharedValue(1);
   const buttonRotation = useSharedValue(0);
   const titleRotation = useSharedValue(-3);
   const speechBubbleScale = useSharedValue(0);
   const confettiOpacity = useSharedValue(0);
-  const heartScale = useSharedValue(1);
-  const starScales = [
-    useSharedValue(1),
-    useSharedValue(1),
-    useSharedValue(1),
-    useSharedValue(1),
-    useSharedValue(1),
-  ];
-  
-  // Create animated styles for stars OUTSIDE of render
-  const star0AnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: starScales[0].value }],
-  }));
-  
-  const star1AnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: starScales[1].value }],
-  }));
-  
-  const star2AnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: starScales[2].value }],
-  }));
-  
-  const star3AnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: starScales[3].value }],
-  }));
-  
-  const star4AnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: starScales[4].value }],
-  }));
-  
-  const starAnimatedStyles = useMemo(() => [
-    star0AnimatedStyle,
-    star1AnimatedStyle,
-    star2AnimatedStyle,
-    star3AnimatedStyle,
-    star4AnimatedStyle,
-  ], [star0AnimatedStyle, star1AnimatedStyle, star2AnimatedStyle, star3AnimatedStyle, star4AnimatedStyle]);
   
   useEffect(() => {
     console.log("Excuse Generator 3000 initialized (iOS)");
@@ -117,112 +67,27 @@ export default function HomeScreen() {
       -1,
       false
     );
-  }, [buttonRotation]);
+  }, []);
   
   useEffect(() => {
-    const loadExcuseData = async () => {
-      if (excuse) {
-        speechBubbleScale.value = withSpring(1, { damping: 10 });
-        
-        const favorited = await isFavorited(excuse);
-        setIsFavorite(favorited);
-        
-        const rating = await getRating(excuse);
-        setCurrentRating(rating);
-        
-        const warnings = [
-          `WARNING: This excuse has a ${believabilityRating}% believability rating`,
-          `FUN FACT: This excuse has been used ${usageCount} times today`,
-          `CAUTION: Use at your own risk!`,
-          `TIP: Confidence is key when delivering this excuse`,
-          `ALERT: May cause raised eyebrows`,
-        ];
-        const randomWarningText = warnings[Math.floor(Math.random() * warnings.length)];
-        setWarningText(randomWarningText);
-        setShowWarning(true);
-        
-        setTimeout(() => setShowWarning(false), 5000);
-      } else {
-        setCurrentRating(null);
-      }
-    };
-    
-    loadExcuseData();
-  }, [excuse, believabilityRating, usageCount, speechBubbleScale]);
-  
-  const handleRateExcuse = async (rating: number) => {
-    if (!excuse) return;
-    
-    console.log('Rating excuse (iOS):', rating);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
-    starScales[rating - 1].value = withSequence(
-      withSpring(1.3),
-      withSpring(1)
-    );
-    
-    setCurrentRating(rating);
-    await saveRating(excuse, rating);
-    
-    setShowRatedMessage(true);
-    setTimeout(() => {
-      setShowRatedMessage(false);
-    }, 1500);
-  };
-  
-  const handleToggleFavorite = async () => {
-    if (!excuse) return;
-    
-    console.log('Toggling favorite (iOS)');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
-    heartScale.value = withSequence(
-      withSpring(1.3),
-      withSpring(1)
-    );
-    
-    if (isFavorite) {
-      const favorites = await import('@/utils/storage').then(m => m.getFavorites());
-      const favs = await favorites;
-      const fav = favs.find(f => f.excuse === excuse);
+    if (excuse) {
+      speechBubbleScale.value = withSpring(1, { damping: 10 });
       
-      if (fav) {
-        const success = await removeFavorite(fav.id);
-        if (success) {
-          setIsFavorite(false);
-          setSuccessModal({
-            visible: true,
-            message: "Removed from favorites! 💔",
-          });
-          
-          setTimeout(() => {
-            setSuccessModal({ visible: false, message: "" });
-          }, 2000);
-        }
-      }
-    } else {
-      const result = await saveFavorite(excuse, situation, tone, length);
+      // Show random warning
+      const warnings = [
+        `WARNING: This excuse has a ${believabilityRating}% believability rating`,
+        `FUN FACT: This excuse has been used ${usageCount} times today`,
+        `CAUTION: Use at your own risk!`,
+        `TIP: Confidence is key when delivering this excuse`,
+        `ALERT: May cause raised eyebrows`,
+      ];
+      const randomWarningText = warnings[Math.floor(Math.random() * warnings.length)];
+      setWarningText(randomWarningText);
+      setShowWarning(true);
       
-      if (result.success) {
-        setIsFavorite(true);
-        setSuccessModal({
-          visible: true,
-          message: "Added to favorites! ❤️",
-        });
-        
-        setTimeout(() => {
-          setSuccessModal({ visible: false, message: "" });
-        }, 2000);
-      } else if (result.limitReached) {
-        setLimitModal(true);
-      } else {
-        setErrorModal({
-          visible: true,
-          message: "Failed to save favorite. Please try again.",
-        });
-      }
+      setTimeout(() => setShowWarning(false), 5000);
     }
-  };
+  }, [excuse]);
   
   const buttonAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -243,10 +108,6 @@ export default function HomeScreen() {
     opacity: confettiOpacity.value,
   }));
   
-  const heartAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: heartScale.value }],
-  }));
-  
   const handleTitlePress = () => {
     console.log("Title tapped, count:", titleClickCount + 1);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -262,6 +123,7 @@ export default function HomeScreen() {
   
   const generateExcuse = async () => {
     console.log("Generating excuse with params:", { situation, tone, length });
+    setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     buttonScale.value = withSequence(
       withSpring(0.9),
@@ -269,25 +131,20 @@ export default function HomeScreen() {
       withSpring(1)
     );
     
-    setLoading(true);
-    
-    try {
-      const response = await apiGenerateExcuse({ situation, tone, length });
+    // TODO: Backend Integration - POST /api/excuses/generate with { situation, tone, length } → { excuse, believabilityRating, usageCount }
+    // Placeholder data
+    setTimeout(() => {
+      const placeholderExcuse = `I couldn't make it because my pet goldfish was having an existential crisis and needed immediate emotional support. You understand, right?`;
+      const placeholderRating = Math.floor(Math.random() * 100);
+      const placeholderUsage = Math.floor(Math.random() * 1000);
       
-      setExcuse(response.excuse);
-      setBelievabilityRating(response.believabilityRating);
-      setUsageCount(response.usageCount);
-      setHistory(prev => [response.excuse, ...prev.slice(0, 4)]);
-      console.log("Excuse generated successfully:", response);
-    } catch (error) {
-      console.error("Failed to generate excuse:", error);
-      setErrorModal({
-        visible: true,
-        message: "Failed to generate excuse. Please check your internet connection and try again.",
-      });
-    } finally {
+      setExcuse(placeholderExcuse);
+      setBelievabilityRating(placeholderRating);
+      setUsageCount(placeholderUsage);
+      setHistory(prev => [placeholderExcuse, ...prev.slice(0, 4)]);
       setLoading(false);
-    }
+      console.log("Excuse generated successfully");
+    }, 1500);
   };
   
   const adjustExcuse = async (direction: "better" | "worse") => {
@@ -295,28 +152,15 @@ export default function HomeScreen() {
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
-    try {
-      const response = await apiAdjustExcuse({
-        originalExcuse: excuse,
-        situation,
-        tone,
-        length,
-        direction,
-      });
-      
-      setExcuse(response.excuse);
-      setBelievabilityRating(response.believabilityRating);
-      setHistory(prev => [response.excuse, ...prev.slice(0, 4)]);
-      console.log(`Excuse adjusted successfully:`, response);
-    } catch (error) {
-      console.error("Failed to adjust excuse:", error);
-      setErrorModal({
-        visible: true,
-        message: "Failed to adjust excuse. Please try again.",
-      });
-    } finally {
+    // TODO: Backend Integration - POST /api/excuses/adjust with { originalExcuse: excuse, situation, tone, length, direction } → { excuse, believabilityRating }
+    // Placeholder
+    setTimeout(() => {
+      const adjustment = direction === "better" ? 20 : -20;
+      const newRating = Math.max(0, Math.min(100, believabilityRating + adjustment));
+      setBelievabilityRating(newRating);
       setLoading(false);
-    }
+      console.log(`Excuse adjusted, new rating: ${newRating}`);
+    }, 1000);
   };
   
   const generateUltimateExcuse = async () => {
@@ -324,101 +168,29 @@ export default function HomeScreen() {
     setLoading(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     
-    try {
-      const response = await getUltimateExcuse();
-      
-      setExcuse(response.excuse);
-      setBelievabilityRating(response.believabilityRating);
+    // TODO: Backend Integration - GET /api/excuses/ultimate → { excuse, believabilityRating }
+    // Placeholder
+    setTimeout(() => {
+      const ultimateExcuseText = `I was abducted by aliens who needed my expertise to fix their spaceship's quantum flux capacitor. They dropped me off just now, but I lost track of time because their planet orbits a black hole where time dilation is extreme. I have a signed note from the alien captain if you need proof.`;
+      setExcuse(ultimateExcuseText);
+      setBelievabilityRating(1);
       setUsageCount(1);
-      setHistory(prev => [response.excuse, ...prev.slice(0, 4)]);
-      console.log("Ultimate excuse generated successfully:", response);
-    } catch (error) {
-      console.error("Failed to generate ultimate excuse:", error);
-      setErrorModal({
-        visible: true,
-        message: "The ultimate excuse is currently unavailable. Try again later!",
-      });
-    } finally {
+      setHistory(prev => [ultimateExcuseText, ...prev.slice(0, 4)]);
       setLoading(false);
-    }
+      console.log("Ultimate excuse generated!");
+    }, 2000);
   };
   
-  const handleShareExcuse = async () => {
-    if (!excuse) return;
-    
-    console.log("Sharing excuse (iOS)");
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
-    const shareText = `${excuse} - Generated by Excuse Generator 3000`;
-    
-    try {
-      const isAvailable = await Sharing.isAvailableAsync();
-      
-      if (isAvailable) {
-        await Sharing.shareAsync('data:text/plain,' + encodeURIComponent(shareText));
-        
-        setSuccessModal({
-          visible: true,
-          message: "Shared! 🎉",
-        });
-        
-        setTimeout(() => {
-          setSuccessModal({ visible: false, message: "" });
-        }, 2000);
-      } else {
-        await Clipboard.setStringAsync(shareText);
-        
-        setSuccessModal({
-          visible: true,
-          message: "Excuse copied to clipboard!",
-        });
-        
-        setTimeout(() => {
-          setSuccessModal({ visible: false, message: "" });
-        }, 2000);
-      }
-    } catch (error: any) {
-      console.error("Failed to share excuse:", error);
-      
-      if (error.message && error.message.includes('cancel')) {
-        console.log("User cancelled share");
-        return;
-      }
-      
-      try {
-        await Clipboard.setStringAsync(shareText);
-        setSuccessModal({
-          visible: true,
-          message: "Excuse copied to clipboard!",
-        });
-        
-        setTimeout(() => {
-          setSuccessModal({ visible: false, message: "" });
-        }, 2000);
-      } catch (clipboardError) {
-        console.error("Failed to copy to clipboard:", clipboardError);
-        setErrorModal({
-          visible: true,
-          message: "Failed to share excuse. Please try again.",
-        });
-      }
-    }
-  };
-  
-  const copyToClipboard = async () => {
+  const copyToClipboard = () => {
     console.log("Copying excuse to clipboard");
-    await Clipboard.setStringAsync(excuse);
+    Clipboard.setString(excuse);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     
+    // Confetti animation
     confettiOpacity.value = withSequence(
       withTiming(1, { duration: 100 }),
       withTiming(0, { duration: 1000 })
     );
-    
-    setSuccessModal({
-      visible: true,
-      message: "Excuse copied to clipboard! 🎉",
-    });
   };
   
   const startOver = () => {
@@ -437,36 +209,15 @@ export default function HomeScreen() {
     <>
       <Stack.Screen
         options={{
-          headerShown: true,
-          title: "EXCUSE GENERATOR 3000",
-          headerStyle: {
-            backgroundColor: bgColor,
-          },
-          headerTintColor: colors.electricOrange,
-          headerTitleStyle: {
-            fontWeight: 'bold',
-            fontSize: 16,
-          },
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={() => {
-                console.log('Navigating to favorites');
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push('/favorites');
-              }}
-              style={styles.favoritesButton}
-            >
-              <Text style={styles.favoritesButtonText}>
-                MY FAVORITES ❤️
-              </Text>
-            </TouchableOpacity>
-          ),
+          headerShown: false,
         }}
       />
       <View style={[styles.container, { backgroundColor: bgColor }]}>
+        {/* Noise texture overlay - only visible in dark mode */}
         {isDark && <NoiseTexture opacity={0.04} />}
         
         <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scrollView}>
+          {/* Title */}
           <Pressable onPress={handleTitlePress}>
             <Animated.View style={[styles.titleContainer, titleAnimatedStyle]}>
               <Text style={[styles.title, { color: colors.electricOrange }]}>
@@ -485,6 +236,7 @@ export default function HomeScreen() {
             Your AI-Powered Get-Out-Of-Jail-Free Card
           </Text>
           
+          {/* Warning Banner */}
           {showWarning && (
             <View style={[styles.warningBanner, { backgroundColor: colors.highlight }]}>
               <Text style={styles.warningText}>
@@ -493,6 +245,7 @@ export default function HomeScreen() {
             </View>
           )}
           
+          {/* Dropdowns */}
           <View style={styles.dropdownContainer}>
             <Text style={[styles.label, { color: textColor }]}>
               Situation:
@@ -567,6 +320,7 @@ export default function HomeScreen() {
             </ScrollView>
           </View>
           
+          {/* Generate Button */}
           <Animated.View style={buttonAnimatedStyle}>
             <TouchableOpacity
               onPress={generateExcuse}
@@ -579,30 +333,9 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </Animated.View>
           
+          {/* Excuse Display */}
           {excuse && (
             <Animated.View style={[styles.speechBubble, { backgroundColor: colors.slimeGreen }, speechBubbleAnimatedStyle]}>
-              <Animated.View style={[styles.heartButton, heartAnimatedStyle]}>
-                <TouchableOpacity onPress={handleToggleFavorite}>
-                  <IconSymbol
-                    ios_icon_name={isFavorite ? "heart.fill" : "heart"}
-                    android_material_icon_name={isFavorite ? "favorite" : "favorite-border"}
-                    size={28}
-                    color={isFavorite ? colors.hotPink : colors.text}
-                  />
-                </TouchableOpacity>
-              </Animated.View>
-              
-              {currentRating && (
-                <View style={[styles.ratingBadge, { backgroundColor: colors.electricOrange }]}>
-                  <Text style={styles.ratingBadgeText}>
-                    ⭐ 
-                  </Text>
-                  <Text style={styles.ratingBadgeText}>
-                    {currentRating}
-                  </Text>
-                </View>
-              )}
-              
               <Text style={styles.excuseText}>
                 {excuse}
               </Text>
@@ -610,62 +343,7 @@ export default function HomeScreen() {
             </Animated.View>
           )}
           
-          {excuse && (
-            <View style={styles.ratingSection}>
-              <Text style={[styles.ratingPrompt, { color: textColor }]}>
-                How believable is this excuse?
-              </Text>
-              <View style={styles.starRow}>
-                {[1, 2, 3, 4, 5].map((star, index) => {
-                  const isFilled = currentRating !== null && star <= currentRating;
-                  const starColor = isFilled ? colors.electricOrange : '#CCCCCC';
-                  const starIconName = isFilled ? 'star' : 'star-border';
-                  
-                  return (
-                    <Animated.View key={star} style={starAnimatedStyles[index]}>
-                      <TouchableOpacity
-                        onPress={() => handleRateExcuse(star)}
-                        style={styles.starButton}
-                      >
-                        <IconSymbol
-                          ios_icon_name={isFilled ? "star.fill" : "star"}
-                          android_material_icon_name={starIconName}
-                          size={24}
-                          color={starColor}
-                        />
-                      </TouchableOpacity>
-                    </Animated.View>
-                  );
-                })}
-              </View>
-              
-              {showRatedMessage && (
-                <View style={[styles.ratedMessage, { backgroundColor: colors.electricOrange }]}>
-                  <Text style={styles.ratedMessageText}>
-                    Rated! ⭐
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-          
-          {excuse && (
-            <TouchableOpacity
-              onPress={handleShareExcuse}
-              style={[styles.shareButton, { backgroundColor: colors.electricOrange }]}
-            >
-              <IconSymbol 
-                ios_icon_name="square.and.arrow.up" 
-                android_material_icon_name="share" 
-                size={20} 
-                color={colors.text}
-              />
-              <Text style={styles.shareButtonText}>
-                SHARE THIS EXCUSE
-              </Text>
-            </TouchableOpacity>
-          )}
-          
+          {/* Action Buttons */}
           {excuse && (
             <View style={styles.actionButtons}>
               <TouchableOpacity
@@ -718,6 +396,7 @@ export default function HomeScreen() {
             </View>
           )}
           
+          {/* History Toggle */}
           {history.length > 0 && (
             <TouchableOpacity
               onPress={() => setShowHistory(!showHistory)}
@@ -729,6 +408,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
           
+          {/* History */}
           {showHistory && history.length > 0 && (
             <View style={[styles.historyContainer, { backgroundColor: cardColor }]}>
               <Text style={[styles.historyTitle, { color: textColor }]}>
@@ -746,43 +426,18 @@ export default function HomeScreen() {
             </View>
           )}
           
+          {/* Disclaimer */}
           <Text style={[styles.disclaimer, { color: textSecondaryColor }]}>
             For entertainment purposes only. We are not responsible for any consequences of using these excuses.
           </Text>
           
+          {/* Confetti Overlay */}
           <Animated.View style={[styles.confettiOverlay, confettiAnimatedStyle]} pointerEvents="none">
             <Text style={styles.confettiText}>
               🎉 🎊 ✨ 🎉 🎊 ✨
             </Text>
           </Animated.View>
         </ScrollView>
-        
-        <Modal
-          visible={errorModal.visible}
-          onClose={() => setErrorModal({ visible: false, message: "" })}
-          title="Oops!"
-          message={errorModal.message}
-          type="error"
-          confirmText="OK"
-        />
-        
-        <Modal
-          visible={successModal.visible}
-          onClose={() => setSuccessModal({ visible: false, message: "" })}
-          title="Success!"
-          message={successModal.message}
-          type="success"
-          confirmText="Awesome!"
-        />
-        
-        <Modal
-          visible={limitModal}
-          onClose={() => setLimitModal(false)}
-          title="Favorites Limit Reached"
-          message="Free version limited to 10 favorites. Delete one to save another!"
-          type="warning"
-          confirmText="OK"
-        />
       </View>
     </>
   );
@@ -798,19 +453,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingTop: 20,
+    paddingTop: 60,
     alignItems: "center",
-    paddingBottom: 20,
-  },
-  favoritesButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginRight: 10,
-  },
-  favoritesButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: colors.hotPink,
   },
   titleContainer: {
     alignItems: "center",
@@ -898,31 +542,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 0,
     elevation: 8,
-    position: 'relative',
-  },
-  heartButton: {
-    position: 'absolute',
-    top: 15,
-    right: 15,
-    zIndex: 10,
-  },
-  ratingBadge: {
-    position: 'absolute',
-    top: 15,
-    left: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    zIndex: 10,
-    borderWidth: 2,
-    borderColor: colors.text,
-  },
-  ratingBadgeText: {
-    fontWeight: 'bold',
-    fontSize: 12,
-    color: colors.text,
   },
   speechBubbleTriangle: {
     position: "absolute",
@@ -942,62 +561,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.text,
     lineHeight: 24,
-    paddingRight: 40,
-  },
-  ratingSection: {
-    width: "100%",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  ratingPrompt: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 12,
-  },
-  starRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  starButton: {
-    padding: 4,
-  },
-  ratedMessage: {
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: colors.text,
-  },
-  ratedMessageText: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: colors.text,
-  },
-  shareButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    marginBottom: 20,
-    width: "100%",
-    borderWidth: 4,
-    borderColor: colors.text,
-    shadowColor: colors.text,
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 8,
-    gap: 10,
-  },
-  shareButtonText: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: colors.text,
-    letterSpacing: 1,
   },
   actionButtons: {
     width: "100%",
