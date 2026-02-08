@@ -7,6 +7,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSpring, wit
 import * as Haptics from "expo-haptics";
 import { generateExcuse as apiGenerateExcuse, adjustExcuse as apiAdjustExcuse, getUltimateExcuse } from "@/utils/api";
 import Modal from "@/components/ui/Modal";
+import NoiseTexture from "@/components/NoiseTexture";
 
 const SITUATIONS = [
   "Late to work",
@@ -244,7 +245,10 @@ export default function HomeScreen() {
         }}
       />
       <View style={[styles.container, { backgroundColor: bgColor }]}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Noise texture overlay - only visible in dark mode */}
+        {isDark && <NoiseTexture opacity={0.04} />}
+        
+        <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scrollView}>
           {/* Title */}
           <Pressable onPress={handleTitlePress}>
             <Animated.View style={[styles.titleContainer, titleAnimatedStyle]}>
@@ -494,6 +498,10 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+    zIndex: 2,
   },
   scrollContent: {
     padding: 20,
