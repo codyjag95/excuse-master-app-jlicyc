@@ -1,3 +1,4 @@
+
 import { StyleSheet, ViewStyle, TextStyle } from 'react-native';
 
 // Excuse Generator 3000 Color Scheme
@@ -6,9 +7,9 @@ export const colors = {
   slimeGreen: '#39FF14',
   electricOrange: '#FF6600',
   
-  // Background colors
-  background: '#FFFEF0', // Cream
-  backgroundDark: '#1A1A1A',
+  // Background colors - Updated to deep black/dark charcoal
+  background: '#FFFEF0', // Cream (light mode)
+  backgroundDark: '#0a0a0a', // Deep black (dark mode)
   
   // Text colors
   text: '#000000',
