@@ -1,13 +1,18 @@
 
-import { Stack } from "expo-router";
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, useColorScheme, Pressable, Clipboard } from "react-native";
-import React, { useState, useEffect } from "react";
+import { Stack, router } from "expo-router";
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, useColorScheme, Pressable } from "react-native";
+import React, { useState, useEffect, useMemo } from "react";
 import { colors } from "@/styles/commonStyles";
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSpring, withTiming, withSequence } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
+import * as Sharing from "expo-sharing";
+import * as Clipboard from "expo-clipboard";
 import { generateExcuse as apiGenerateExcuse, adjustExcuse as apiAdjustExcuse, getUltimateExcuse } from "@/utils/api";
 import Modal from "@/components/ui/Modal";
 import NoiseTexture from "@/components/NoiseTexture";
+import { IconSymbol } from "@/components/IconSymbol";
+import { saveFavorite, isFavorited, removeFavorite, saveRating, getRating } from "@/utils/storage";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SITUATIONS = [
   "Late to work",
@@ -36,6 +41,7 @@ const LENGTHS = [
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
+  const insets = useSafeAreaInsets();
   
   const [situation, setSituation] = useState(SITUATIONS[0]);
   const [tone, setTone] = useState(TONES[0]);
@@ -51,6 +57,10 @@ export default function HomeScreen() {
   const [warningText, setWarningText] = useState("");
   const [errorModal, setErrorModal] = useState({ visible: false, message: "" });
   const [successModal, setSuccessModal] = useState({ visible: false, message: "" });
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [limitModal, setLimitModal] = useState(false);
+  const [currentRating, setCurrentRating] = useState<number | null>(null);
+  const [showRatedMessage, setShowRatedMessage] = useState(false);
   
   // Animations
   const buttonScale = useSharedValue(1);
@@ -58,6 +68,43 @@ export default function HomeScreen() {
   const titleRotation = useSharedValue(-3);
   const speechBubbleScale = useSharedValue(0);
   const confettiOpacity = useSharedValue(0);
+  const heartScale = useSharedValue(1);
+  const starScales = [
+    useSharedValue(1),
+    useSharedValue(1),
+    useSharedValue(1),
+    useSharedValue(1),
+    useSharedValue(1),
+  ];
+  
+  // Create animated styles for stars OUTSIDE of render
+  const star0AnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: starScales[0].value }],
+  }));
+  
+  const star1AnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: starScales[1].value }],
+  }));
+  
+  const star2AnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: starScales[2].value }],
+  }));
+  
+  const star3AnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: starScales[3].value }],
+  }));
+  
+  const star4AnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: starScales[4].value }],
+  }));
+  
+  const starAnimatedStyles = useMemo(() => [
+    star0AnimatedStyle,
+    star1AnimatedStyle,
+    star2AnimatedStyle,
+    star3AnimatedStyle,
+    star4AnimatedStyle,
+  ], [star0AnimatedStyle, star1AnimatedStyle, star2AnimatedStyle, star3AnimatedStyle, star4AnimatedStyle]);
   
   useEffect(() => {
     console.log("Excuse Generator 3000 initialized");
@@ -71,27 +118,119 @@ export default function HomeScreen() {
       -1,
       false
     );
-  }, []);
+  }, [buttonRotation]);
   
   useEffect(() => {
-    if (excuse) {
-      speechBubbleScale.value = withSpring(1, { damping: 10 });
+    const loadExcuseData = async () => {
+      if (excuse) {
+        speechBubbleScale.value = withSpring(1, { damping: 10 });
+        
+        // Check if excuse is favorited
+        const favorited = await isFavorited(excuse);
+        setIsFavorite(favorited);
+        
+        // Load previous rating
+        const rating = await getRating(excuse);
+        setCurrentRating(rating);
+        
+        // Show random warning
+        const warnings = [
+          `WARNING: This excuse has a ${believabilityRating}% believability rating`,
+          `FUN FACT: This excuse has been used ${usageCount} times today`,
+          `CAUTION: Use at your own risk!`,
+          `TIP: Confidence is key when delivering this excuse`,
+          `ALERT: May cause raised eyebrows`,
+        ];
+        const randomWarningText = warnings[Math.floor(Math.random() * warnings.length)];
+        setWarningText(randomWarningText);
+        setShowWarning(true);
+        
+        setTimeout(() => setShowWarning(false), 5000);
+      } else {
+        setCurrentRating(null);
+      }
+    };
+    
+    loadExcuseData();
+  }, [excuse, believabilityRating, usageCount, speechBubbleScale]);
+  
+  const handleRateExcuse = async (rating: number) => {
+    if (!excuse) return;
+    
+    console.log('Rating excuse:', rating);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    // Animate the tapped star
+    starScales[rating - 1].value = withSequence(
+      withSpring(1.3),
+      withSpring(1)
+    );
+    
+    setCurrentRating(rating);
+    await saveRating(excuse, rating);
+    
+    setShowRatedMessage(true);
+    setTimeout(() => {
+      setShowRatedMessage(false);
+    }, 1500);
+  };
+  
+  const handleToggleFavorite = async () => {
+    if (!excuse) return;
+    
+    console.log('Toggling favorite');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    // Animate heart
+    heartScale.value = withSequence(
+      withSpring(1.3),
+      withSpring(1)
+    );
+    
+    if (isFavorite) {
+      // Remove from favorites
+      const favorites = await import('@/utils/storage').then(m => m.getFavorites());
+      const favs = await favorites;
+      const fav = favs.find(f => f.excuse === excuse);
       
-      // Show random warning
-      const warnings = [
-        `WARNING: This excuse has a ${believabilityRating}% believability rating`,
-        `FUN FACT: This excuse has been used ${usageCount} times today`,
-        `CAUTION: Use at your own risk!`,
-        `TIP: Confidence is key when delivering this excuse`,
-        `ALERT: May cause raised eyebrows`,
-      ];
-      const randomWarningText = warnings[Math.floor(Math.random() * warnings.length)];
-      setWarningText(randomWarningText);
-      setShowWarning(true);
+      if (fav) {
+        const success = await removeFavorite(fav.id);
+        if (success) {
+          setIsFavorite(false);
+          setSuccessModal({
+            visible: true,
+            message: "Removed from favorites! 💔",
+          });
+          
+          setTimeout(() => {
+            setSuccessModal({ visible: false, message: "" });
+          }, 2000);
+        }
+      }
+    } else {
+      // Add to favorites
+      const result = await saveFavorite(excuse, situation, tone, length);
       
-      setTimeout(() => setShowWarning(false), 5000);
+      if (result.success) {
+        setIsFavorite(true);
+        setSuccessModal({
+          visible: true,
+          message: "Added to favorites! ❤️",
+        });
+        
+        setTimeout(() => {
+          setSuccessModal({ visible: false, message: "" });
+        }, 2000);
+      } else if (result.limitReached) {
+        setLimitModal(true);
+      } else {
+        setErrorModal({
+          visible: true,
+          message: "Failed to save favorite. Please try again.",
+        });
+      }
     }
-  }, [excuse]);
+  };
   
   const buttonAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -112,6 +251,10 @@ export default function HomeScreen() {
     opacity: confettiOpacity.value,
   }));
   
+  const heartAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartScale.value }],
+  }));
+  
   const handleTitlePress = () => {
     console.log("Title tapped, count:", titleClickCount + 1);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -127,13 +270,14 @@ export default function HomeScreen() {
   
   const generateExcuse = async () => {
     console.log("Generating excuse with params:", { situation, tone, length });
-    setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     buttonScale.value = withSequence(
       withSpring(0.9),
       withSpring(1.1),
       withSpring(1)
     );
+    
+    setLoading(true);
     
     try {
       const response = await apiGenerateExcuse({ situation, tone, length });
@@ -193,7 +337,7 @@ export default function HomeScreen() {
       
       setExcuse(response.excuse);
       setBelievabilityRating(response.believabilityRating);
-      setUsageCount(1); // Ultimate excuse is special, set usage to 1
+      setUsageCount(1);
       setHistory(prev => [response.excuse, ...prev.slice(0, 4)]);
       console.log("Ultimate excuse generated successfully:", response);
     } catch (error) {
@@ -207,18 +351,78 @@ export default function HomeScreen() {
     }
   };
   
-  const copyToClipboard = () => {
+  const handleShareExcuse = async () => {
+    if (!excuse) return;
+    
+    console.log("Sharing excuse");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    const shareText = `${excuse} - Generated by Excuse Generator 3000`;
+    
+    try {
+      const isAvailable = await Sharing.isAvailableAsync();
+      
+      if (isAvailable) {
+        await Sharing.shareAsync('data:text/plain,' + encodeURIComponent(shareText));
+        
+        setSuccessModal({
+          visible: true,
+          message: "Shared! 🎉",
+        });
+        
+        setTimeout(() => {
+          setSuccessModal({ visible: false, message: "" });
+        }, 2000);
+      } else {
+        await Clipboard.setStringAsync(shareText);
+        
+        setSuccessModal({
+          visible: true,
+          message: "Excuse copied to clipboard!",
+        });
+        
+        setTimeout(() => {
+          setSuccessModal({ visible: false, message: "" });
+        }, 2000);
+      }
+    } catch (error: any) {
+      console.error("Failed to share excuse:", error);
+      
+      if (error.message && error.message.includes('cancel')) {
+        console.log("User cancelled share");
+        return;
+      }
+      
+      try {
+        await Clipboard.setStringAsync(shareText);
+        setSuccessModal({
+          visible: true,
+          message: "Excuse copied to clipboard!",
+        });
+        
+        setTimeout(() => {
+          setSuccessModal({ visible: false, message: "" });
+        }, 2000);
+      } catch (clipboardError) {
+        console.error("Failed to copy to clipboard:", clipboardError);
+        setErrorModal({
+          visible: true,
+          message: "Failed to share excuse. Please try again.",
+        });
+      }
+    }
+  };
+  
+  const copyToClipboard = async () => {
     console.log("Copying excuse to clipboard");
-    Clipboard.setString(excuse);
+    await Clipboard.setStringAsync(excuse);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     
-    // Confetti animation
     confettiOpacity.value = withSequence(
       withTiming(1, { duration: 100 }),
       withTiming(0, { duration: 1000 })
     );
     
-    // Show success message
     setSuccessModal({
       visible: true,
       message: "Excuse copied to clipboard! 🎉",
@@ -241,15 +445,36 @@ export default function HomeScreen() {
     <>
       <Stack.Screen
         options={{
-          headerShown: false,
+          headerShown: true,
+          title: "EXCUSE GENERATOR 3000",
+          headerStyle: {
+            backgroundColor: bgColor,
+          },
+          headerTintColor: colors.electricOrange,
+          headerTitleStyle: {
+            fontWeight: 'bold',
+            fontSize: 16,
+          },
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                console.log('Navigating to favorites');
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/favorites');
+              }}
+              style={styles.favoritesButton}
+            >
+              <Text style={styles.favoritesButtonText}>
+                MY FAVORITES ❤️
+              </Text>
+            </TouchableOpacity>
+          ),
         }}
       />
       <View style={[styles.container, { backgroundColor: bgColor }]}>
-        {/* Noise texture overlay - only visible in dark mode */}
         {isDark && <NoiseTexture opacity={0.04} />}
         
         <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scrollView}>
-          {/* Title */}
           <Pressable onPress={handleTitlePress}>
             <Animated.View style={[styles.titleContainer, titleAnimatedStyle]}>
               <Text style={[styles.title, { color: colors.electricOrange }]}>
@@ -268,7 +493,6 @@ export default function HomeScreen() {
             Your AI-Powered Get-Out-Of-Jail-Free Card
           </Text>
           
-          {/* Warning Banner */}
           {showWarning && (
             <View style={[styles.warningBanner, { backgroundColor: colors.highlight }]}>
               <Text style={styles.warningText}>
@@ -277,7 +501,6 @@ export default function HomeScreen() {
             </View>
           )}
           
-          {/* Dropdowns */}
           <View style={styles.dropdownContainer}>
             <Text style={[styles.label, { color: textColor }]}>
               Situation:
@@ -352,7 +575,6 @@ export default function HomeScreen() {
             </ScrollView>
           </View>
           
-          {/* Generate Button */}
           <Animated.View style={buttonAnimatedStyle}>
             <TouchableOpacity
               onPress={generateExcuse}
@@ -365,9 +587,30 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </Animated.View>
           
-          {/* Excuse Display */}
           {excuse && (
             <Animated.View style={[styles.speechBubble, { backgroundColor: colors.slimeGreen }, speechBubbleAnimatedStyle]}>
+              <Animated.View style={[styles.heartButton, heartAnimatedStyle]}>
+                <TouchableOpacity onPress={handleToggleFavorite}>
+                  <IconSymbol
+                    ios_icon_name={isFavorite ? "heart.fill" : "heart"}
+                    android_material_icon_name={isFavorite ? "favorite" : "favorite-border"}
+                    size={28}
+                    color={isFavorite ? colors.hotPink : colors.text}
+                  />
+                </TouchableOpacity>
+              </Animated.View>
+              
+              {currentRating && (
+                <View style={[styles.ratingBadge, { backgroundColor: colors.electricOrange }]}>
+                  <Text style={styles.ratingBadgeText}>
+                    ⭐ 
+                  </Text>
+                  <Text style={styles.ratingBadgeText}>
+                    {currentRating}
+                  </Text>
+                </View>
+              )}
+              
               <Text style={styles.excuseText}>
                 {excuse}
               </Text>
@@ -375,7 +618,62 @@ export default function HomeScreen() {
             </Animated.View>
           )}
           
-          {/* Action Buttons */}
+          {excuse && (
+            <View style={styles.ratingSection}>
+              <Text style={[styles.ratingPrompt, { color: textColor }]}>
+                How believable is this excuse?
+              </Text>
+              <View style={styles.starRow}>
+                {[1, 2, 3, 4, 5].map((star, index) => {
+                  const isFilled = currentRating !== null && star <= currentRating;
+                  const starColor = isFilled ? colors.electricOrange : '#CCCCCC';
+                  const starIconName = isFilled ? 'star' : 'star-border';
+                  
+                  return (
+                    <Animated.View key={star} style={starAnimatedStyles[index]}>
+                      <TouchableOpacity
+                        onPress={() => handleRateExcuse(star)}
+                        style={styles.starButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name={isFilled ? "star.fill" : "star"}
+                          android_material_icon_name={starIconName}
+                          size={24}
+                          color={starColor}
+                        />
+                      </TouchableOpacity>
+                    </Animated.View>
+                  );
+                })}
+              </View>
+              
+              {showRatedMessage && (
+                <View style={[styles.ratedMessage, { backgroundColor: colors.electricOrange }]}>
+                  <Text style={styles.ratedMessageText}>
+                    Rated! ⭐
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+          
+          {excuse && (
+            <TouchableOpacity
+              onPress={handleShareExcuse}
+              style={[styles.shareButton, { backgroundColor: colors.electricOrange }]}
+            >
+              <IconSymbol 
+                ios_icon_name="square.and.arrow.up" 
+                android_material_icon_name="share" 
+                size={20} 
+                color={colors.text}
+              />
+              <Text style={styles.shareButtonText}>
+                SHARE THIS EXCUSE
+              </Text>
+            </TouchableOpacity>
+          )}
+          
           {excuse && (
             <View style={styles.actionButtons}>
               <TouchableOpacity
@@ -428,7 +726,6 @@ export default function HomeScreen() {
             </View>
           )}
           
-          {/* History Toggle */}
           {history.length > 0 && (
             <TouchableOpacity
               onPress={() => setShowHistory(!showHistory)}
@@ -440,7 +737,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
           
-          {/* History */}
           {showHistory && history.length > 0 && (
             <View style={[styles.historyContainer, { backgroundColor: cardColor }]}>
               <Text style={[styles.historyTitle, { color: textColor }]}>
@@ -458,12 +754,10 @@ export default function HomeScreen() {
             </View>
           )}
           
-          {/* Disclaimer */}
           <Text style={[styles.disclaimer, { color: textSecondaryColor }]}>
             For entertainment purposes only. We are not responsible for any consequences of using these excuses.
           </Text>
           
-          {/* Confetti Overlay */}
           <Animated.View style={[styles.confettiOverlay, confettiAnimatedStyle]} pointerEvents="none">
             <Text style={styles.confettiText}>
               🎉 🎊 ✨ 🎉 🎊 ✨
@@ -471,7 +765,6 @@ export default function HomeScreen() {
           </Animated.View>
         </ScrollView>
         
-        {/* Error Modal */}
         <Modal
           visible={errorModal.visible}
           onClose={() => setErrorModal({ visible: false, message: "" })}
@@ -481,7 +774,6 @@ export default function HomeScreen() {
           confirmText="OK"
         />
         
-        {/* Success Modal */}
         <Modal
           visible={successModal.visible}
           onClose={() => setSuccessModal({ visible: false, message: "" })}
@@ -489,6 +781,15 @@ export default function HomeScreen() {
           message={successModal.message}
           type="success"
           confirmText="Awesome!"
+        />
+        
+        <Modal
+          visible={limitModal}
+          onClose={() => setLimitModal(false)}
+          title="Favorites Limit Reached"
+          message="Free version limited to 10 favorites. Delete one to save another!"
+          type="warning"
+          confirmText="OK"
         />
       </View>
     </>
@@ -505,8 +806,19 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingTop: 60,
+    paddingTop: 20,
     alignItems: "center",
+    paddingBottom: 20,
+  },
+  favoritesButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 10,
+  },
+  favoritesButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: colors.hotPink,
   },
   titleContainer: {
     alignItems: "center",
@@ -594,6 +906,31 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 0,
     elevation: 8,
+    position: 'relative',
+  },
+  heartButton: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    zIndex: 10,
+  },
+  ratingBadge: {
+    position: 'absolute',
+    top: 15,
+    left: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 10,
+    borderWidth: 2,
+    borderColor: colors.text,
+  },
+  ratingBadgeText: {
+    fontWeight: 'bold',
+    fontSize: 12,
+    color: colors.text,
   },
   speechBubbleTriangle: {
     position: "absolute",
@@ -613,6 +950,62 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.text,
     lineHeight: 24,
+    paddingRight: 40,
+  },
+  ratingSection: {
+    width: "100%",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  ratingPrompt: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
+  starRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  starButton: {
+    padding: 4,
+  },
+  ratedMessage: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: colors.text,
+  },
+  ratedMessageText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: colors.text,
+  },
+  shareButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginBottom: 20,
+    width: "100%",
+    borderWidth: 4,
+    borderColor: colors.text,
+    shadowColor: colors.text,
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
+    gap: 10,
+  },
+  shareButtonText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: colors.text,
+    letterSpacing: 1,
   },
   actionButtons: {
     width: "100%",
