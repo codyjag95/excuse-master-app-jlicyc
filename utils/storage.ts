@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const FAVORITES_KEY = '@excuse_generator_favorites';
 const RATING_KEY_PREFIX = '@excuse_generator_rating_';
+const GENERATION_COUNT_KEY = '@excuse_generator_generation_count';
 const MAX_FAVORITES = 10;
 
 export interface FavoriteExcuse {
@@ -212,5 +213,52 @@ export async function getRating(excuseText: string): Promise<number | null> {
   } catch (error) {
     console.error('[Storage] Failed to get rating:', error);
     return null;
+  }
+}
+
+/**
+ * Get the current generation count for interstitial ads
+ */
+export async function getGenerationCount(): Promise<number> {
+  try {
+    const countStr = await storage.getItem(GENERATION_COUNT_KEY);
+    if (!countStr) {
+      return 0;
+    }
+    const count = parseInt(countStr, 10);
+    console.log('[Storage] Generation count loaded:', count);
+    return count;
+  } catch (error) {
+    console.error('[Storage] Failed to get generation count:', error);
+    return 0;
+  }
+}
+
+/**
+ * Increment the generation count
+ * Returns the new count
+ */
+export async function incrementGenerationCount(): Promise<number> {
+  try {
+    const currentCount = await getGenerationCount();
+    const newCount = currentCount + 1;
+    await storage.setItem(GENERATION_COUNT_KEY, newCount.toString());
+    console.log('[Storage] Generation count incremented to:', newCount);
+    return newCount;
+  } catch (error) {
+    console.error('[Storage] Failed to increment generation count:', error);
+    return 0;
+  }
+}
+
+/**
+ * Reset the generation count to 0
+ */
+export async function resetGenerationCount(): Promise<void> {
+  try {
+    await storage.setItem(GENERATION_COUNT_KEY, '0');
+    console.log('[Storage] Generation count reset to 0');
+  } catch (error) {
+    console.error('[Storage] Failed to reset generation count:', error);
   }
 }

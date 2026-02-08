@@ -1,7 +1,7 @@
 
 import { Stack, router } from "expo-router";
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, useColorScheme, Pressable, Platform } from "react-native";
-import React, { useState, useEffect, useMemo } from "react";
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, useColorScheme, Pressable, Platform, ActivityIndicator } from "react-native";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { colors } from "@/styles/commonStyles";
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSpring, withTiming, withSequence } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
@@ -11,7 +11,19 @@ import { generateExcuse as apiGenerateExcuse, adjustExcuse as apiAdjustExcuse, g
 import Modal from "@/components/ui/Modal";
 import NoiseTexture from "@/components/NoiseTexture";
 import { IconSymbol } from "@/components/IconSymbol";
-import { saveFavorite, isFavorited, removeFavorite, saveRating, getRating } from "@/utils/storage";
+import { saveFavorite, isFavorited, removeFavorite, saveRating, getRating, getGenerationCount, incrementGenerationCount, resetGenerationCount } from "@/utils/storage";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BannerAd, BannerAdSize, InterstitialAd, AdEventType, TestIds } from "react-native-google-mobile-ads";
+
+// AdMob Ad Unit IDs
+// NOTE: Replace with real ad unit IDs before production
+const BANNER_AD_UNIT_ID = __DEV__
+  ? TestIds.BANNER // Test banner ID for development
+  : 'ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY'; // Replace with real Ad Unit ID before production
+
+const INTERSTITIAL_AD_UNIT_ID = __DEV__
+  ? TestIds.INTERSTITIAL // Test interstitial ID for development
+  : 'ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY'; // Replace with real Ad Unit ID before production
 
 const SITUATIONS = [
   "Late to work",
@@ -40,6 +52,7 @@ const LENGTHS = [
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
+  const insets = useSafeAreaInsets();
   
   const [situation, setSituation] = useState(SITUATIONS[0]);
   const [tone, setTone] = useState(TONES[0]);
@@ -59,6 +72,13 @@ export default function HomeScreen() {
   const [limitModal, setLimitModal] = useState(false);
   const [currentRating, setCurrentRating] = useState<number | null>(null);
   const [showRatedMessage, setShowRatedMessage] = useState(false);
+  
+  // Ad state
+  const [showInterstitial, setShowInterstitial] = useState(false);
+  const [interstitialCountdown, setInterstitialCountdown] = useState(5);
+  const [bannerError, setBannerError] = useState(false);
+  const interstitialRef = useRef<InterstitialAd | null>(null);
+  const pendingExcuseGeneration = useRef<(() => void) | null>(null);
   
   // Animations
   const buttonScale = useSharedValue(1);
@@ -116,6 +136,51 @@ export default function HomeScreen() {
       -1,
       false
     );
+    
+    // Initialize interstitial ad
+    const interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
+      requestNonPersonalizedAdsOnly: true,
+    });
+    
+    interstitialRef.current = interstitial;
+    
+    const unsubscribeLoaded = interstitial.addAdEventListener(AdEventType.LOADED, () => {
+      console.log('[AdMob] Interstitial ad loaded');
+    });
+    
+    const unsubscribeClosed = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
+      console.log('[AdMob] Interstitial ad closed');
+      setShowInterstitial(false);
+      
+      // Execute pending excuse generation
+      if (pendingExcuseGeneration.current) {
+        pendingExcuseGeneration.current();
+        pendingExcuseGeneration.current = null;
+      }
+      
+      // Pre-load next ad
+      interstitial.load();
+    });
+    
+    const unsubscribeError = interstitial.addAdEventListener(AdEventType.ERROR, (error) => {
+      console.error('[AdMob] Interstitial ad error:', error);
+      setShowInterstitial(false);
+      
+      // Execute pending excuse generation even if ad fails
+      if (pendingExcuseGeneration.current) {
+        pendingExcuseGeneration.current();
+        pendingExcuseGeneration.current = null;
+      }
+    });
+    
+    // Load initial ad
+    interstitial.load();
+    
+    return () => {
+      unsubscribeLoaded();
+      unsubscribeClosed();
+      unsubscribeError();
+    };
   }, [buttonRotation]);
   
   useEffect(() => {
@@ -151,6 +216,17 @@ export default function HomeScreen() {
     
     loadExcuseData();
   }, [excuse, believabilityRating, usageCount, speechBubbleScale]);
+  
+  // Countdown timer for interstitial ad
+  useEffect(() => {
+    if (showInterstitial && interstitialCountdown > 0) {
+      const timer = setTimeout(() => {
+        setInterstitialCountdown(prev => prev - 1);
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [showInterstitial, interstitialCountdown]);
   
   const handleRateExcuse = async (rating: number) => {
     if (!excuse) return;
@@ -268,13 +344,48 @@ export default function HomeScreen() {
   
   const generateExcuse = async () => {
     console.log("Generating excuse with params:", { situation, tone, length });
-    setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     buttonScale.value = withSequence(
       withSpring(0.9),
       withSpring(1.1),
       withSpring(1)
     );
+    
+    // Check if we should show interstitial ad
+    const currentCount = await getGenerationCount();
+    const newCount = await incrementGenerationCount();
+    
+    console.log('[AdMob] Generation count:', newCount);
+    
+    // Show interstitial every 5 generations, but not on the first generation
+    if (newCount > 1 && newCount % 5 === 0) {
+      console.log('[AdMob] Showing interstitial ad');
+      
+      // Store the excuse generation logic to execute after ad
+      pendingExcuseGeneration.current = async () => {
+        await performExcuseGeneration();
+        await resetGenerationCount();
+      };
+      
+      // Show interstitial if loaded
+      if (interstitialRef.current?.loaded) {
+        setShowInterstitial(true);
+        setInterstitialCountdown(5);
+        interstitialRef.current.show();
+      } else {
+        console.warn('[AdMob] Interstitial ad not ready, skipping');
+        // Execute immediately if ad not ready
+        await performExcuseGeneration();
+        await resetGenerationCount();
+      }
+    } else {
+      // No ad, generate excuse immediately
+      await performExcuseGeneration();
+    }
+  };
+  
+  const performExcuseGeneration = async () => {
+    setLoading(true);
     
     try {
       const response = await apiGenerateExcuse({ situation, tone, length });
@@ -470,6 +581,41 @@ export default function HomeScreen() {
       />
       <View style={[styles.container, { backgroundColor: bgColor }]}>
         {isDark && <NoiseTexture opacity={0.04} />}
+        
+        {/* Interstitial Ad Overlay */}
+        {showInterstitial && (
+          <View style={styles.interstitialOverlay}>
+            <View style={[styles.interstitialContent, { backgroundColor: bgColor }]}>
+              <ActivityIndicator size="large" color={colors.electricOrange} />
+              <Text style={[styles.interstitialText, { color: textColor }]}>
+                Ad will close in 
+              </Text>
+              <Text style={[styles.interstitialText, { color: textColor }]}>
+                {interstitialCountdown}
+              </Text>
+              <Text style={[styles.interstitialText, { color: textColor }]}>
+                 seconds...
+              </Text>
+              {interstitialCountdown === 0 && (
+                <TouchableOpacity
+                  onPress={() => {
+                    console.log('[AdMob] User closed interstitial manually');
+                    setShowInterstitial(false);
+                    if (pendingExcuseGeneration.current) {
+                      pendingExcuseGeneration.current();
+                      pendingExcuseGeneration.current = null;
+                    }
+                  }}
+                  style={[styles.closeAdButton, { backgroundColor: colors.electricOrange }]}
+                >
+                  <Text style={styles.closeAdButtonText}>
+                    CLOSE AD
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
         
         <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scrollView}>
           <Pressable onPress={handleTitlePress}>
@@ -788,6 +934,26 @@ export default function HomeScreen() {
           type="warning"
           confirmText="OK"
         />
+        
+        {/* Banner Ad at Bottom */}
+        <View style={[styles.bannerAdContainer, { paddingBottom: insets.bottom }]}>
+          <View style={styles.bannerAdBorder} />
+          {!bannerError ? (
+            <BannerAd
+              unitId={BANNER_AD_UNIT_ID}
+              size={BannerAdSize.BANNER}
+              requestOptions={{
+                requestNonPersonalizedAdsOnly: true,
+              }}
+              onAdFailedToLoad={(error) => {
+                console.error('[AdMob] Banner ad failed to load:', error);
+                setBannerError(true);
+              }}
+            />
+          ) : (
+            <View style={styles.bannerAdPlaceholder} />
+          )}
+        </View>
       </View>
     </>
   );
@@ -805,6 +971,63 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 20,
     alignItems: "center",
+    paddingBottom: 80, // Extra padding for banner ad
+  },
+  bannerAdContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#000000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+  },
+  bannerAdBorder: {
+    height: 1,
+    backgroundColor: colors.electricOrange,
+    width: '100%',
+  },
+  bannerAdPlaceholder: {
+    width: 320,
+    height: 50,
+    backgroundColor: '#000000',
+  },
+  interstitialOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  interstitialContent: {
+    padding: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: colors.electricOrange,
+  },
+  interstitialText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 15,
+  },
+  closeAdButton: {
+    marginTop: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    borderWidth: 3,
+    borderColor: colors.text,
+  },
+  closeAdButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.text,
   },
   favoritesButton: {
     paddingHorizontal: 12,
