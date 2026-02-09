@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Excuse Master",
@@ -36,7 +37,7 @@
       "expo-router",
       "expo-web-browser"
     ],
-    "scheme": "Excuse Master",
+    "scheme": "excusemaster",
     "experiments": {
       "typedRoutes": true
     },
