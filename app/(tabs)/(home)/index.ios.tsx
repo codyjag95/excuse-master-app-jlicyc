@@ -5,6 +5,8 @@ import React, { useState, useEffect } from "react";
 import { colors } from "@/styles/commonStyles";
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSpring, withTiming, withSequence } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
+import { generateExcuse as apiGenerateExcuse, adjustExcuse as apiAdjustExcuse, getUltimateExcuse } from "@/utils/api";
+import Modal from "@/components/ui/Modal";
 import NoiseTexture from "@/components/NoiseTexture";
 
 const SITUATIONS = [
@@ -47,6 +49,8 @@ export default function HomeScreen() {
   const [titleClickCount, setTitleClickCount] = useState(0);
   const [showWarning, setShowWarning] = useState(false);
   const [warningText, setWarningText] = useState("");
+  const [errorModal, setErrorModal] = useState({ visible: false, message: "" });
+  const [successModal, setSuccessModal] = useState({ visible: false, message: "" });
   
   // Animations
   const buttonScale = useSharedValue(1);
@@ -131,20 +135,23 @@ export default function HomeScreen() {
       withSpring(1)
     );
     
-    // TODO: Backend Integration - POST /api/excuses/generate with { situation, tone, length } → { excuse, believabilityRating, usageCount }
-    // Placeholder data
-    setTimeout(() => {
-      const placeholderExcuse = `I couldn't make it because my pet goldfish was having an existential crisis and needed immediate emotional support. You understand, right?`;
-      const placeholderRating = Math.floor(Math.random() * 100);
-      const placeholderUsage = Math.floor(Math.random() * 1000);
+    try {
+      const response = await apiGenerateExcuse({ situation, tone, length });
       
-      setExcuse(placeholderExcuse);
-      setBelievabilityRating(placeholderRating);
-      setUsageCount(placeholderUsage);
-      setHistory(prev => [placeholderExcuse, ...prev.slice(0, 4)]);
+      setExcuse(response.excuse);
+      setBelievabilityRating(response.believabilityRating);
+      setUsageCount(response.usageCount);
+      setHistory(prev => [response.excuse, ...prev.slice(0, 4)]);
+      console.log("Excuse generated successfully:", response);
+    } catch (error) {
+      console.error("Failed to generate excuse:", error);
+      setErrorModal({
+        visible: true,
+        message: "Failed to generate excuse. Please check your internet connection and try again.",
+      });
+    } finally {
       setLoading(false);
-      console.log("Excuse generated successfully");
-    }, 1500);
+    }
   };
   
   const adjustExcuse = async (direction: "better" | "worse") => {
@@ -152,15 +159,28 @@ export default function HomeScreen() {
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
-    // TODO: Backend Integration - POST /api/excuses/adjust with { originalExcuse: excuse, situation, tone, length, direction } → { excuse, believabilityRating }
-    // Placeholder
-    setTimeout(() => {
-      const adjustment = direction === "better" ? 20 : -20;
-      const newRating = Math.max(0, Math.min(100, believabilityRating + adjustment));
-      setBelievabilityRating(newRating);
+    try {
+      const response = await apiAdjustExcuse({
+        originalExcuse: excuse,
+        situation,
+        tone,
+        length,
+        direction,
+      });
+      
+      setExcuse(response.excuse);
+      setBelievabilityRating(response.believabilityRating);
+      setHistory(prev => [response.excuse, ...prev.slice(0, 4)]);
+      console.log(`Excuse adjusted successfully:`, response);
+    } catch (error) {
+      console.error("Failed to adjust excuse:", error);
+      setErrorModal({
+        visible: true,
+        message: "Failed to adjust excuse. Please try again.",
+      });
+    } finally {
       setLoading(false);
-      console.log(`Excuse adjusted, new rating: ${newRating}`);
-    }, 1000);
+    }
   };
   
   const generateUltimateExcuse = async () => {
@@ -168,17 +188,23 @@ export default function HomeScreen() {
     setLoading(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     
-    // TODO: Backend Integration - GET /api/excuses/ultimate → { excuse, believabilityRating }
-    // Placeholder
-    setTimeout(() => {
-      const ultimateExcuseText = `I was abducted by aliens who needed my expertise to fix their spaceship's quantum flux capacitor. They dropped me off just now, but I lost track of time because their planet orbits a black hole where time dilation is extreme. I have a signed note from the alien captain if you need proof.`;
-      setExcuse(ultimateExcuseText);
-      setBelievabilityRating(1);
-      setUsageCount(1);
-      setHistory(prev => [ultimateExcuseText, ...prev.slice(0, 4)]);
+    try {
+      const response = await getUltimateExcuse();
+      
+      setExcuse(response.excuse);
+      setBelievabilityRating(response.believabilityRating);
+      setUsageCount(1); // Ultimate excuse is special, set usage to 1
+      setHistory(prev => [response.excuse, ...prev.slice(0, 4)]);
+      console.log("Ultimate excuse generated successfully:", response);
+    } catch (error) {
+      console.error("Failed to generate ultimate excuse:", error);
+      setErrorModal({
+        visible: true,
+        message: "The ultimate excuse is currently unavailable. Try again later!",
+      });
+    } finally {
       setLoading(false);
-      console.log("Ultimate excuse generated!");
-    }, 2000);
+    }
   };
   
   const copyToClipboard = () => {
@@ -191,6 +217,12 @@ export default function HomeScreen() {
       withTiming(1, { duration: 100 }),
       withTiming(0, { duration: 1000 })
     );
+    
+    // Show success message
+    setSuccessModal({
+      visible: true,
+      message: "Excuse copied to clipboard! 🎉",
+    });
   };
   
   const startOver = () => {
@@ -438,6 +470,26 @@ export default function HomeScreen() {
             </Text>
           </Animated.View>
         </ScrollView>
+        
+        {/* Error Modal */}
+        <Modal
+          visible={errorModal.visible}
+          onClose={() => setErrorModal({ visible: false, message: "" })}
+          title="Oops!"
+          message={errorModal.message}
+          type="error"
+          confirmText="OK"
+        />
+        
+        {/* Success Modal */}
+        <Modal
+          visible={successModal.visible}
+          onClose={() => setSuccessModal({ visible: false, message: "" })}
+          title="Success!"
+          message={successModal.message}
+          type="success"
+          confirmText="Awesome!"
+        />
       </View>
     </>
   );
