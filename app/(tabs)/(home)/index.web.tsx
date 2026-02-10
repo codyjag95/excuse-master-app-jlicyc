@@ -17,6 +17,20 @@ const SITUATIONS = [
   "Can't attend event",
   "Didn't do homework",
   "Need to leave early",
+  "Why I'm single",
+  "Ghosting someone",
+  "Skipping the gym",
+  "Not replying to texts",
+  "Missing family gathering",
+  "Returning something late",
+  "Why I can't lend money",
+  "Avoiding phone calls",
+  "Breaking up with someone",
+  "Quitting a job",
+  "Moving back home",
+  "Why I haven't visited",
+  "Can't make it to wedding",
+  "Caught speeding",
 ];
 
 const TONES = [

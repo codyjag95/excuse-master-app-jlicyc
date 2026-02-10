@@ -16,6 +16,20 @@ const SITUATIONS = [
   "Can't attend event",
   "Didn't do homework",
   "Need to leave early",
+  "Why I'm single",
+  "Ghosting someone",
+  "Skipping the gym",
+  "Not replying to texts",
+  "Missing family gathering",
+  "Returning something late",
+  "Why I can't lend money",
+  "Avoiding phone calls",
+  "Breaking up with someone",
+  "Quitting a job",
+  "Moving back home",
+  "Why I haven't visited",
+  "Can't make it to wedding",
+  "Caught speeding",
 ];
 
 const TONES = [
@@ -126,7 +140,9 @@ export default function HomeScreen() {
   };
   
   const generateExcuse = async () => {
-    console.log("Generating excuse with params:", { situation, tone, length });
+    // Generate a unique seed for randomization
+    const seed = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    console.log("Generating excuse with params:", { situation, tone, length, seed });
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     buttonScale.value = withSequence(
@@ -136,7 +152,7 @@ export default function HomeScreen() {
     );
     
     try {
-      const response = await apiGenerateExcuse({ situation, tone, length });
+      const response = await apiGenerateExcuse({ situation, tone, length, seed });
       
       setExcuse(response.excuse);
       setBelievabilityRating(response.believabilityRating);
@@ -155,7 +171,9 @@ export default function HomeScreen() {
   };
   
   const adjustExcuse = async (direction: "better" | "worse") => {
-    console.log(`Adjusting excuse to make it ${direction}`);
+    // Generate a unique seed for randomization
+    const seed = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    console.log(`Adjusting excuse to make it ${direction} with seed:`, seed);
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
@@ -166,6 +184,7 @@ export default function HomeScreen() {
         tone,
         length,
         direction,
+        seed,
       });
       
       setExcuse(response.excuse);

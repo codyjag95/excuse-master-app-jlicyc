@@ -83,6 +83,7 @@ export interface GenerateExcuseRequest {
   situation: string;
   tone: string;
   length: string;
+  seed?: string;
 }
 
 export interface GenerateExcuseResponse {
@@ -97,6 +98,7 @@ export interface AdjustExcuseRequest {
   tone: string;
   length: string;
   direction: 'better' | 'worse';
+  seed?: string;
 }
 
 export interface AdjustExcuseResponse {
