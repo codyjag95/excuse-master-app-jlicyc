@@ -9,6 +9,7 @@ interface GenerateExcuseBody {
   situation: string;
   tone: string;
   length: string;
+  seed?: string;
 }
 
 interface AdjustExcuseBody {
@@ -17,6 +18,7 @@ interface AdjustExcuseBody {
   tone: string;
   length: string;
   direction: 'better' | 'worse';
+  seed?: string;
 }
 
 interface ExcuseResponse {
@@ -36,9 +38,13 @@ export function register(app: App, fastify: FastifyInstance) {
           type: 'object',
           required: ['situation', 'tone', 'length'],
           properties: {
-            situation: { type: 'string', description: 'The situation (e.g., "Late to work")' },
+            situation: {
+              type: 'string',
+              description: 'The situation (e.g., "Late to work", "Why I\'m single", "Ghosting someone", "Skipping the gym", "Not replying to texts", "Missing family gathering", "Returning something late", "Why I can\'t lend money", "Avoiding phone calls", "Breaking up with someone", "Quitting a job", "Moving back home", "Why I haven\'t visited", "Can\'t make it to wedding", "Caught speeding")'
+            },
             tone: { type: 'string', description: 'The tone (e.g., "Believable", "Absurd")' },
             length: { type: 'string', description: 'The length (e.g., "Quick one-liner")' },
+            seed: { type: 'string', description: 'Optional seed for randomization to ensure unique outputs' },
           },
         },
         response: {
@@ -54,21 +60,30 @@ export function register(app: App, fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest<{ Body: GenerateExcuseBody }>, reply: FastifyReply) => {
-      const { situation, tone, length } = request.body;
+      const { situation, tone, length, seed } = request.body;
 
-      app.logger.info({ situation, tone, length }, 'Generating excuse');
+      // Generate seed if not provided
+      const generationSeed = seed || `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+      app.logger.info({ situation, tone, length, seed: generationSeed }, 'Generating excuse');
 
       try {
-        const systemPrompt = `You are a creative excuse generator. Generate witty, contextual excuses based on the user's specifications.
-Include a believability rating (0-100) at the end of your response in the format "BELIEVABILITY: [number]".
-Make sure the excuse matches the requested tone and length.`;
+        const systemPrompt = `You are an excuse generator. Generate creative, unique excuses that are substantially different each time.
 
-        const userPrompt = `Generate an excuse for the following:
+CRITICAL: Each excuse must be completely original in wording, theme, and approach. Avoid repeating similar phrases, scenarios, or structures. Vary the subject matter, characters, locations, and circumstances in each generation.
+
+Always include a believability rating (0-100) at the end in the format "BELIEVABILITY: [number]".`;
+
+        const userPrompt = `Generate a creative, unique excuse for the following situation.
+
 Situation: ${situation}
 Tone: ${tone}
 Length: ${length}
+Seed: ${generationSeed}
 
-Provide a creative excuse that fits these parameters. End with "BELIEVABILITY: [0-100]" where you rate how believable the excuse is.`;
+Generate a completely original excuse that hasn't been used before. Make it substantially different from typical excuses - vary the subject matter, characters, locations, and circumstances. The seed value should inspire unique variations.
+
+End with "BELIEVABILITY: [0-100]" where you rate how believable the excuse is.`;
 
         const { text } = await generateText({
           model: gateway('openai/gpt-5.2'),
@@ -133,6 +148,7 @@ Provide a creative excuse that fits these parameters. End with "BELIEVABILITY: [
             tone: { type: 'string' },
             length: { type: 'string' },
             direction: { type: 'string', enum: ['better', 'worse'] },
+            seed: { type: 'string', description: 'Optional seed for randomization to ensure unique outputs' },
           },
         },
         response: {
@@ -147,10 +163,13 @@ Provide a creative excuse that fits these parameters. End with "BELIEVABILITY: [
       },
     },
     async (request: FastifyRequest<{ Body: AdjustExcuseBody }>, reply: FastifyReply) => {
-      const { originalExcuse, situation, tone, length, direction } = request.body;
+      const { originalExcuse, situation, tone, length, direction, seed } = request.body;
+
+      // Generate seed if not provided
+      const generationSeed = seed || `${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
       app.logger.info(
-        { situation, direction, originalExcuse: originalExcuse.substring(0, 50) },
+        { situation, direction, originalExcuse: originalExcuse.substring(0, 50), seed: generationSeed },
         'Adjusting excuse'
       );
 
@@ -158,6 +177,9 @@ Provide a creative excuse that fits these parameters. End with "BELIEVABILITY: [
         const directionText = direction === 'better' ? 'more believable and realistic' : 'more absurd and over-the-top';
 
         const systemPrompt = `You are an expert at refining excuses. Take an existing excuse and make it ${directionText}.
+
+CRITICAL: Create a unique variation that is substantially different in wording and approach from the original. Avoid copying phrases or patterns - reimagine the excuse creatively.
+
 Include a believability rating (0-100) at the end of your response in the format "BELIEVABILITY: [number]".`;
 
         const userPrompt = `Original excuse: "${originalExcuse}"
@@ -166,8 +188,11 @@ Situation: ${situation}
 Tone: ${tone}
 Length: ${length}
 Direction: Make it ${directionText}
+Seed: ${generationSeed}
 
-Refine this excuse while maintaining the specified tone and length. End with "BELIEVABILITY: [0-100]".`;
+Refine this excuse while maintaining the specified tone and length. Create a unique variation that uses different wording, scenarios, and details from the original. The seed value should inspire creative variations.
+
+End with "BELIEVABILITY: [0-100]".`;
 
         const { text } = await generateText({
           model: gateway('openai/gpt-5.2'),
