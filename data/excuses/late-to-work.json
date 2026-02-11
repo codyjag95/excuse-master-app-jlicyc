@@ -1,0 +1,33 @@
+
+[
+  {
+    "excuse": "My alarm clock was hacked by a rogue AI that wanted me to sleep in.",
+    "believabilityRating": 15,
+    "tone": "Absurd",
+    "length": "Quick one-liner"
+  },
+  {
+    "excuse": "I got stuck in an elevator with a motivational speaker who wouldn't let me leave until I found my 'inner purpose'.",
+    "believabilityRating": 35,
+    "tone": "Dramatic",
+    "length": "Short paragraph"
+  },
+  {
+    "excuse": "There was a massive traffic jam caused by a truck carrying rubber ducks that spilled all over the highway.",
+    "believabilityRating": 45,
+    "tone": "Believable",
+    "length": "Quick one-liner"
+  },
+  {
+    "excuse": "My cat learned how to open doors and locked me in my bedroom. I had to wait for my roommate to come home.",
+    "believabilityRating": 40,
+    "tone": "Overly Detailed",
+    "length": "Short paragraph"
+  },
+  {
+    "excuse": "I witnessed a crime and had to give a statement to the police.",
+    "believabilityRating": 70,
+    "tone": "Believable",
+    "length": "Quick one-liner"
+  }
+]

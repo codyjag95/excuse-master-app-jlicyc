@@ -1,0 +1,33 @@
+
+[
+  {
+    "excuse": "I was planning a surprise party but the venue cancelled last minute.",
+    "believabilityRating": 55,
+    "tone": "Believable",
+    "length": "Quick one-liner"
+  },
+  {
+    "excuse": "Time travelers from the future told me your birthday was next week. I trusted them.",
+    "believabilityRating": 8,
+    "tone": "Absurd",
+    "length": "Short paragraph"
+  },
+  {
+    "excuse": "I've been in a coma for the past week and just woke up.",
+    "believabilityRating": 20,
+    "tone": "Dramatic",
+    "length": "Quick one-liner"
+  },
+  {
+    "excuse": "My calendar app had a critical bug that shifted all dates by exactly one week.",
+    "believabilityRating": 40,
+    "tone": "Technical Jargon",
+    "length": "Short paragraph"
+  },
+  {
+    "excuse": "I was kidnapped by birthday clowns who held me hostage until I agreed to join their circus.",
+    "believabilityRating": 12,
+    "tone": "Absurd",
+    "length": "Elaborate story"
+  }
+]

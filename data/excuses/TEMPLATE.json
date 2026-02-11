@@ -1,0 +1,21 @@
+
+[
+  {
+    "excuse": "Replace this with your excuse text",
+    "believabilityRating": 50,
+    "tone": "Believable",
+    "length": "Quick one-liner"
+  },
+  {
+    "excuse": "Add as many excuses as you want",
+    "believabilityRating": 75,
+    "tone": "Overly Detailed",
+    "length": "Short paragraph"
+  },
+  {
+    "excuse": "Each excuse should have all four fields",
+    "believabilityRating": 30,
+    "tone": "Absurd",
+    "length": "Elaborate story"
+  }
+]

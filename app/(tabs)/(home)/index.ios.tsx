@@ -6,6 +6,7 @@ import { colors } from "@/styles/commonStyles";
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSpring, withTiming, withSequence } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import { generateExcuse as apiGenerateExcuse, adjustExcuse as apiAdjustExcuse, getUltimateExcuse } from "@/utils/api";
+import { loadLocalExcuse, hasLocalExcuses, getExcuseStats } from "@/utils/excuseLoader";
 import Modal from "@/components/ui/Modal";
 import NoiseTexture from "@/components/NoiseTexture";
 
@@ -65,6 +66,7 @@ export default function HomeScreen() {
   const [warningText, setWarningText] = useState("");
   const [errorModal, setErrorModal] = useState({ visible: false, message: "" });
   const [successModal, setSuccessModal] = useState({ visible: false, message: "" });
+  const [useLocalExcuses, setUseLocalExcuses] = useState(true);
   
   // Animations
   const buttonScale = useSharedValue(1);
@@ -75,6 +77,11 @@ export default function HomeScreen() {
   
   useEffect(() => {
     console.log("Excuse Generator 3000 initialized (iOS)");
+    
+    // Log excuse database stats
+    const stats = getExcuseStats();
+    console.log('[ExcuseLoader] Database stats:', stats);
+    
     // Wobble animation for button
     buttonRotation.value = withRepeat(
       withSequence(
@@ -140,7 +147,7 @@ export default function HomeScreen() {
   };
   
   const generateExcuse = async () => {
-    console.log("Generating excuse with params:", { situation, tone, length });
+    console.log("Generating excuse with params:", { situation, tone, length, useLocalExcuses });
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     buttonScale.value = withSequence(
@@ -150,13 +157,31 @@ export default function HomeScreen() {
     );
     
     try {
-      const response = await apiGenerateExcuse({ situation, tone, length });
+      // Try to load from local JSON files first
+      if (useLocalExcuses) {
+        const localExcuse = loadLocalExcuse(situation, tone, length);
+        
+        if (localExcuse) {
+          setExcuse(localExcuse.excuse);
+          setBelievabilityRating(localExcuse.believabilityRating);
+          setUsageCount(localExcuse.usageCount);
+          setHistory(prev => [localExcuse.excuse, ...prev.slice(0, 4)]);
+          console.log("Loaded excuse from local database");
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Fall back to API if no local excuse found
+      console.log("Falling back to API for excuse generation");
+      const seed = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const response = await apiGenerateExcuse({ situation, tone, length, seed });
       
       setExcuse(response.excuse);
       setBelievabilityRating(response.believabilityRating);
       setUsageCount(response.usageCount);
       setHistory(prev => [response.excuse, ...prev.slice(0, 4)]);
-      console.log("Excuse generated successfully:", response);
+      console.log("Excuse generated successfully from API:", response);
     } catch (error) {
       console.error("Failed to generate excuse:", error);
       setErrorModal({
@@ -169,7 +194,9 @@ export default function HomeScreen() {
   };
   
   const adjustExcuse = async (direction: "better" | "worse") => {
-    console.log(`Adjusting excuse to make it ${direction}`);
+    // For adjustments, always use API since we need to modify existing excuse
+    const seed = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    console.log(`Adjusting excuse to make it ${direction} with seed:`, seed);
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
@@ -180,6 +207,7 @@ export default function HomeScreen() {
         tone,
         length,
         direction,
+        seed,
       });
       
       setExcuse(response.excuse);
@@ -207,7 +235,7 @@ export default function HomeScreen() {
       
       setExcuse(response.excuse);
       setBelievabilityRating(response.believabilityRating);
-      setUsageCount(1); // Ultimate excuse is special, set usage to 1
+      setUsageCount(1);
       setHistory(prev => [response.excuse, ...prev.slice(0, 4)]);
       console.log("Ultimate excuse generated successfully:", response);
     } catch (error) {
@@ -246,10 +274,20 @@ export default function HomeScreen() {
     speechBubbleScale.value = 0;
   };
   
+  const toggleExcuseSource = () => {
+    const newValue = !useLocalExcuses;
+    setUseLocalExcuses(newValue);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    console.log("Excuse source toggled:", newValue ? "Local JSON" : "AI API");
+  };
+  
   const bgColor = isDark ? colors.backgroundDark : colors.background;
   const textColor = isDark ? colors.textDark : colors.text;
   const textSecondaryColor = isDark ? colors.textSecondaryDark : colors.textSecondary;
   const cardColor = isDark ? colors.cardDark : colors.card;
+  
+  const hasLocal = hasLocalExcuses(situation);
+  const sourceText = useLocalExcuses ? "📁 LOCAL" : "🤖 AI";
   
   return (
     <>
@@ -259,7 +297,6 @@ export default function HomeScreen() {
         }}
       />
       <View style={[styles.container, { backgroundColor: bgColor }]}>
-        {/* Noise texture overlay - only visible in dark mode */}
         {isDark && <NoiseTexture opacity={0.04} />}
         
         <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scrollView}>
@@ -281,6 +318,18 @@ export default function HomeScreen() {
           <Text style={[styles.tagline, { color: textSecondaryColor }]}>
             Your AI-Powered Get-Out-Of-Jail-Free Card
           </Text>
+          
+          {/* Source Toggle */}
+          <TouchableOpacity
+            onPress={toggleExcuseSource}
+            style={[styles.sourceToggle, { backgroundColor: useLocalExcuses ? colors.slimeGreen : colors.electricOrange }]}
+          >
+            <Text style={styles.sourceToggleText}>
+              {sourceText}
+              {" "}
+              {hasLocal && useLocalExcuses ? "✓" : ""}
+            </Text>
+          </TouchableOpacity>
           
           {/* Warning Banner */}
           {showWarning && (
@@ -537,8 +586,21 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: 16,
     fontWeight: "600",
-    marginBottom: 20,
+    marginBottom: 10,
     textAlign: "center",
+  },
+  sourceToggle: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: colors.text,
+  },
+  sourceToggleText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: colors.text,
   },
   warningBanner: {
     padding: 12,
