@@ -1,45 +1,59 @@
 
-// Import all excuse JSON files
+// Import the master excuse database
+import masterExcuses from './master-excuses.json';
+
+// Import individual excuse files (legacy support)
 import lateToWork from './late-to-work.json';
 import missedDeadline from './missed-deadline.json';
 import forgotBirthday from './forgot-birthday.json';
 
-// Type definition for the new excuse format
-export interface Excuse {
-  situation: string;
-  tone: string; // lowercase: "believable", "absurd", "dramatic", "mysterious", "technical", "detailed"
-  length: string; // simplified: "short", "medium", "long"
+// Type definition for excuse format
+export interface RawExcuseData {
   excuse: string;
-  believabilityRating?: number; // Optional - will be auto-calculated if missing
+  believabilityRating: number;
+  tone: string;
+  length: string;
 }
 
-// Map situation names to their excuse data
-// Each JSON file can now contain either a single object {} or an array []
-export const excuseDatabase: Record<string, Excuse[]> = {
-  "Late to work": Array.isArray(lateToWork) ? lateToWork : [lateToWork],
-  "Missed deadline": Array.isArray(missedDeadline) ? missedDeadline : [missedDeadline],
-  "Forgot birthday": Array.isArray(forgotBirthday) ? forgotBirthday : [forgotBirthday],
-  // Add more mappings as you create more JSON files
-  // "Can't attend event": cantAttendEvent,
-  // "Didn't do homework": didntDoHomework,
-  // etc.
-};
+export interface ProcessedExcuse {
+  excuse: string;
+  believabilityRating: number;
+  tone: string;
+  length: string;
+}
 
-// Tone mapping: lowercase to display format
+// Tone mapping: display format to normalized
 const toneMap: Record<string, string> = {
-  believable: "Believable",
-  absurd: "Absurd",
-  dramatic: "Dramatic",
-  mysterious: "Mysterious",
-  technical: "Technical Jargon",
-  detailed: "Overly Detailed",
+  'Believable': 'believable',
+  'Absurd': 'absurd',
+  'Dramatic': 'dramatic',
+  'Mysterious': 'mysterious',
+  'Technical Jargon': 'technical',
+  'Overly Detailed': 'detailed',
+  'Funny': 'believable', // Mapped to believable as per user's spec
 };
 
-// Length mapping: simplified to display format
+// Length mapping: display format to normalized
 const lengthMap: Record<string, string> = {
-  short: "Quick one-liner",
-  medium: "Short paragraph",
-  long: "Elaborate story",
+  'Quick one-liner': 'short',
+  'Short paragraph': 'medium',
+  'Elaborate story': 'long',
+};
+
+// Reverse mappings for display
+const reverseToneMap: Record<string, string> = {
+  'believable': 'Believable',
+  'absurd': 'Absurd',
+  'dramatic': 'Dramatic',
+  'mysterious': 'Mysterious',
+  'technical': 'Technical Jargon',
+  'detailed': 'Overly Detailed',
+};
+
+const reverseLengthMap: Record<string, string> = {
+  'short': 'Quick one-liner',
+  'medium': 'Short paragraph',
+  'long': 'Elaborate story',
 };
 
 // Auto-calculate believability rating based on tone
@@ -56,38 +70,72 @@ function calculateBelievabilityRating(tone: string): number {
     case 'mysterious':
       return Math.floor(Math.random() * (70 - 50 + 1)) + 50; // 50-70
     case 'technical':
+    case 'technical jargon':
       return Math.floor(Math.random() * (65 - 45 + 1)) + 45; // 45-65
     case 'detailed':
+    case 'overly detailed':
       return Math.floor(Math.random() * (55 - 35 + 1)) + 35; // 35-55
     default:
       return Math.floor(Math.random() * (70 - 30 + 1)) + 30; // 30-70 for unknown tones
   }
 }
 
+// Process master excuses database
+const processedMasterExcuses: Record<string, ProcessedExcuse[]> = {};
+
+// Type assertion for the master excuses structure
+const masterExcusesData = masterExcuses as Record<string, RawExcuseData[]>;
+
+// Process each situation from the master file
+Object.keys(masterExcusesData).forEach((situation) => {
+  const excusesArray = masterExcusesData[situation];
+  
+  if (Array.isArray(excusesArray) && excusesArray.length > 0) {
+    processedMasterExcuses[situation] = excusesArray.map((excuse) => ({
+      excuse: excuse.excuse,
+      believabilityRating: excuse.believabilityRating || calculateBelievabilityRating(excuse.tone),
+      tone: excuse.tone,
+      length: excuse.length,
+    }));
+    
+    console.log(`[ExcuseDB] Loaded ${excusesArray.length} excuses for "${situation}"`);
+  }
+});
+
+// Merge with legacy individual files (for backward compatibility)
+const legacyExcuses: Record<string, any> = {
+  "Late to work": lateToWork,
+  "Missed deadline": missedDeadline,
+  "Forgot birthday": forgotBirthday,
+};
+
+// Process legacy files and merge (master file takes precedence)
+Object.keys(legacyExcuses).forEach((situation) => {
+  if (!processedMasterExcuses[situation] || processedMasterExcuses[situation].length === 0) {
+    const legacyData = legacyExcuses[situation];
+    const excusesArray = Array.isArray(legacyData) ? legacyData : [legacyData];
+    
+    processedMasterExcuses[situation] = excusesArray.map((excuse: any) => ({
+      excuse: excuse.excuse,
+      believabilityRating: excuse.believabilityRating || calculateBelievabilityRating(excuse.tone),
+      tone: excuse.tone,
+      length: excuse.length,
+    }));
+  }
+});
+
+// Export the final excuse database
+export const excuseDatabase: Record<string, ProcessedExcuse[]> = processedMasterExcuses;
+
 // Helper function to normalize tone/length for comparison
 function normalizeTone(tone: string): string {
   const lowerTone = tone.toLowerCase();
-  // Map display format back to lowercase
-  const reverseMap: Record<string, string> = {
-    'believable': 'believable',
-    'absurd': 'absurd',
-    'overly detailed': 'detailed',
-    'dramatic': 'dramatic',
-    'technical jargon': 'technical',
-    'mysterious': 'mysterious',
-  };
-  return reverseMap[lowerTone] || lowerTone;
+  return toneMap[tone] || lowerTone;
 }
 
 function normalizeLength(length: string): string {
   const lowerLength = length.toLowerCase();
-  // Map display format back to simplified
-  const reverseMap: Record<string, string> = {
-    'quick one-liner': 'short',
-    'short paragraph': 'medium',
-    'elaborate story': 'long',
-  };
-  return reverseMap[lowerLength] || lowerLength;
+  return lengthMap[length] || lowerLength;
 }
 
 // Helper function to get a random excuse based on filters
@@ -99,30 +147,36 @@ export function getRandomExcuse(
   const excuses = excuseDatabase[situation];
   
   if (!excuses || excuses.length === 0) {
-    console.log(`No excuses found for situation: ${situation}`);
+    console.log(`[ExcuseDB] No excuses found for situation: ${situation}`);
     return null;
   }
+  
+  console.log(`[ExcuseDB] Found ${excuses.length} excuses for "${situation}"`);
   
   // Filter by tone and length if provided
   let filteredExcuses = excuses;
   
   if (tone) {
     const normalizedTone = normalizeTone(tone);
-    filteredExcuses = filteredExcuses.filter(e => 
-      e.tone.toLowerCase() === normalizedTone
-    );
+    filteredExcuses = filteredExcuses.filter(e => {
+      const excuseTone = e.tone.toLowerCase();
+      return excuseTone === normalizedTone || excuseTone === tone.toLowerCase();
+    });
+    console.log(`[ExcuseDB] After tone filter (${tone}): ${filteredExcuses.length} excuses`);
   }
   
   if (length) {
     const normalizedLength = normalizeLength(length);
-    filteredExcuses = filteredExcuses.filter(e => 
-      e.length.toLowerCase() === normalizedLength
-    );
+    filteredExcuses = filteredExcuses.filter(e => {
+      const excuseLength = e.length.toLowerCase();
+      return excuseLength === normalizedLength || excuseLength === length.toLowerCase();
+    });
+    console.log(`[ExcuseDB] After length filter (${length}): ${filteredExcuses.length} excuses`);
   }
   
   // If no matches after filtering, use all excuses for that situation
   if (filteredExcuses.length === 0) {
-    console.log(`No exact matches found, using all excuses for ${situation}`);
+    console.log(`[ExcuseDB] No exact matches found, using all excuses for ${situation}`);
     filteredExcuses = excuses;
   }
   
@@ -130,18 +184,37 @@ export function getRandomExcuse(
   const randomIndex = Math.floor(Math.random() * filteredExcuses.length);
   const selectedExcuse = filteredExcuses[randomIndex];
   
-  // Auto-calculate believability rating if not present
-  const believabilityRating = selectedExcuse.believabilityRating !== undefined
-    ? selectedExcuse.believabilityRating
-    : calculateBelievabilityRating(selectedExcuse.tone);
+  console.log(`[ExcuseDB] Selected excuse #${randomIndex + 1}/${filteredExcuses.length}`);
   
   return {
     excuse: selectedExcuse.excuse,
-    believabilityRating,
+    believabilityRating: selectedExcuse.believabilityRating,
   };
 }
 
 // Helper to get all situations that have excuse data
 export function getAvailableSituations(): string[] {
   return Object.keys(excuseDatabase);
+}
+
+// Get statistics about the excuse database
+export function getExcuseStats() {
+  const situations = Object.keys(excuseDatabase);
+  const totalExcuses = situations.reduce(
+    (sum, situation) => sum + excuseDatabase[situation].length,
+    0
+  );
+  
+  const stats = {
+    totalSituations: situations.length,
+    totalExcuses,
+    situations,
+    excusesBySituation: {} as Record<string, number>,
+  };
+  
+  situations.forEach((situation) => {
+    stats.excusesBySituation[situation] = excuseDatabase[situation].length;
+  });
+  
+  return stats;
 }

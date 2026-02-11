@@ -1,5 +1,5 @@
 
-import { Stack } from "expo-router";
+import { Stack, router } from "expo-router";
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, useColorScheme, Pressable, Clipboard } from "react-native";
 import React, { useState, useEffect } from "react";
 import { colors } from "@/styles/commonStyles";
@@ -9,6 +9,7 @@ import { generateExcuse as apiGenerateExcuse, adjustExcuse as apiAdjustExcuse, g
 import { loadLocalExcuse, hasLocalExcuses, getExcuseStats } from "@/utils/excuseLoader";
 import Modal from "@/components/ui/Modal";
 import NoiseTexture from "@/components/NoiseTexture";
+import { IconSymbol } from "@/components/IconSymbol";
 
 const SITUATIONS = [
   "Late to work",
@@ -281,6 +282,12 @@ export default function HomeScreen() {
     console.log("Excuse source toggled:", newValue ? "Local JSON" : "AI API");
   };
   
+  const openImportStatus = () => {
+    console.log("Opening import status screen");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/import-status');
+  };
+  
   const bgColor = isDark ? colors.backgroundDark : colors.background;
   const textColor = isDark ? colors.textDark : colors.text;
   const textSecondaryColor = isDark ? colors.textSecondaryDark : colors.textSecondary;
@@ -288,6 +295,8 @@ export default function HomeScreen() {
   
   const hasLocal = hasLocalExcuses(situation);
   const sourceText = useLocalExcuses ? "📁 LOCAL" : "🤖 AI";
+  const stats = getExcuseStats();
+  const totalExcusesText = `${stats.totalExcuses.toLocaleString()} excuses loaded`;
   
   return (
     <>
@@ -298,6 +307,19 @@ export default function HomeScreen() {
       />
       <View style={[styles.container, { backgroundColor: bgColor }]}>
         {isDark && <NoiseTexture opacity={0.04} />}
+        
+        {/* Info Button */}
+        <TouchableOpacity 
+          style={styles.infoButton}
+          onPress={openImportStatus}
+        >
+          <IconSymbol 
+            ios_icon_name="info.circle.fill" 
+            android_material_icon_name="info" 
+            size={24} 
+            color={colors.slimeGreen} 
+          />
+        </TouchableOpacity>
         
         <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scrollView}>
           {/* Title */}
@@ -317,6 +339,11 @@ export default function HomeScreen() {
           
           <Text style={[styles.tagline, { color: textSecondaryColor }]}>
             Your AI-Powered Get-Out-Of-Jail-Free Card
+          </Text>
+          
+          {/* Database Stats */}
+          <Text style={[styles.statsText, { color: colors.slimeGreen }]}>
+            {totalExcusesText}
           </Text>
           
           {/* Source Toggle */}
@@ -562,6 +589,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  infoButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+    padding: 8,
+  },
   scrollView: {
     flex: 1,
     zIndex: 2,
@@ -586,6 +622,12 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: 16,
     fontWeight: "600",
+    marginBottom: 5,
+    textAlign: "center",
+  },
+  statsText: {
+    fontSize: 12,
+    fontWeight: "bold",
     marginBottom: 10,
     textAlign: "center",
   },

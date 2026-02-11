@@ -1,117 +1,180 @@
 
-# Excuse Database
+# Excuse Database - Import Instructions
 
-This directory contains local excuse data in JSON format. Each file represents a category of excuses.
+This directory contains the local excuse database for the Excuse Generator 3000 app.
 
-## New Format (Simplified)
+## 🚀 Quick Start: Import Your Master JSON File
 
-Each excuse is now a simple object with these fields:
+You have a master JSON file with 25,962 excuses? Perfect! Here's how to import it:
+
+### Step 1: Open the Master File
+
+Open `data/excuses/master-excuses.json` in your code editor.
+
+### Step 2: Replace the Contents
+
+Replace the entire contents of `master-excuses.json` with your master JSON file.
+
+Your file should look like this:
 
 ```json
 {
-  "situation": "late-to-work",
-  "tone": "believable",
-  "length": "short",
-  "excuse": "The excuse text here",
-  "believabilityRating": 85
+  "Didn't do homework": [
+    {
+      "excuse": "My laptop crashed and I lost everything...",
+      "believabilityRating": 85,
+      "tone": "Believable",
+      "length": "Elaborate story"
+    },
+    {
+      "excuse": "Another excuse here...",
+      "believabilityRating": 45,
+      "tone": "Absurd",
+      "length": "Quick one-liner"
+    }
+  ],
+  "Late to work": [
+    {
+      "excuse": "Traffic was insane this morning...",
+      "believabilityRating": 90,
+      "tone": "Believable",
+      "length": "Short paragraph"
+    }
+  ],
+  "Ghosting someone": [
+    ...
+  ]
 }
 ```
 
-### Fields:
+### Step 3: That's It!
 
-- **situation** (required): The situation category (e.g., "late-to-work", "missed-deadline")
-- **tone** (required): Lowercase tone value
-  - `believable` - Realistic and plausible
-  - `absurd` - Ridiculous and unbelievable
-  - `dramatic` - Over-the-top and theatrical
-  - `mysterious` - Vague and enigmatic
-  - `technical` - Jargon-heavy and complex
-  - `detailed` - Overly specific and elaborate
-- **length** (required): Simplified length value
-  - `short` - Quick one-liner
-  - `medium` - Short paragraph
-  - `long` - Elaborate story
-- **excuse** (required): The actual excuse text
-- **believabilityRating** (optional): Number from 1-100. If omitted, will be auto-calculated based on tone:
-  - `believable`: 70-100
-  - `absurd`: 1-30
-  - `dramatic`: 40-60
-  - `mysterious`: 50-70
-  - `technical`: 45-65
-  - `detailed`: 35-55
+Once you paste your JSON into `master-excuses.json`, the app will automatically:
+- ✅ Load all 25,962 excuses
+- ✅ Organize them by situation
+- ✅ Filter by tone and length
+- ✅ Display statistics in the app
 
-## File Format Options
+### Step 4: Verify the Import
 
-You can use either format:
+After pasting your JSON:
 
-### Single Object (for individual excuses):
+1. Restart the app (if it's running)
+2. The app will log how many excuses were loaded for each situation
+3. Check the console for messages like:
+   ```
+   [ExcuseDB] Loaded 1298 excuses for "Didn't do homework"
+   [ExcuseDB] Loaded 1297 excuses for "Late to work"
+   ...
+   ```
+
+## 📋 Expected Format
+
+Your master JSON file should have this structure:
+
 ```json
 {
-  "situation": "late-to-work",
-  "tone": "believable",
-  "length": "short",
-  "excuse": "Traffic was terrible this morning."
+  "Situation Name": [
+    {
+      "excuse": "The excuse text",
+      "believabilityRating": 85,
+      "tone": "Believable",
+      "length": "Elaborate story"
+    }
+  ]
 }
 ```
 
-### Array of Objects (for multiple excuses):
-```json
-[
-  {
-    "situation": "late-to-work",
-    "tone": "believable",
-    "length": "short",
-    "excuse": "Traffic was terrible this morning."
-  },
-  {
-    "situation": "late-to-work",
-    "tone": "absurd",
-    "length": "medium",
-    "excuse": "A UFO landed in the middle of the highway and aliens asked me for directions."
-  }
-]
-```
+### Supported Values:
 
-## Adding New Excuses
+**Tones:**
+- `"Believable"` - Realistic excuses (rating: 70-100)
+- `"Absurd"` - Ridiculous excuses (rating: 1-30)
+- `"Dramatic"` - Over-the-top excuses (rating: 40-60)
+- `"Mysterious"` - Vague excuses (rating: 50-70)
+- `"Technical Jargon"` - Complex excuses (rating: 45-65)
+- `"Funny"` - Humorous excuses (mapped to Believable)
 
-1. Create a new JSON file in this directory (e.g., `skipping-gym.json`)
-2. Add your excuse(s) using the format above
-3. Import the file in `index.ts`:
-   ```typescript
-   import skippingGym from './skipping-gym.json';
-   ```
-4. Add it to the `excuseDatabase` object:
-   ```typescript
-   export const excuseDatabase: Record<string, Excuse[]> = {
-     // ... existing entries
-     "Skipping the gym": Array.isArray(skippingGym) ? skippingGym : [skippingGym],
-   };
-   ```
+**Lengths:**
+- `"Quick one-liner"` - Short, punchy excuses
+- `"Short paragraph"` - Medium-length excuses
+- `"Elaborate story"` - Long, detailed excuses
 
-## Bulk Import
+**Situations (20 total):**
+- "Didn't do homework"
+- "Late to work"
+- "Ghosting someone"
+- "Missed deadline"
+- "Forgot birthday"
+- "Can't attend event"
+- "Need to leave early"
+- "Breaking up with someone"
+- "Canceling plans"
+- "Not answering phone"
+- "Skipping the gym"
+- "Eating junk food"
+- "Not replying to texts"
+- "Missing a meeting"
+- "Being late to class"
+- "Not doing chores"
+- "Spending too much money"
+- "Not visiting family"
+- "Forgetting an anniversary"
+- "Not going to a party"
 
-To import your 300+ excuses:
+## 🔧 How It Works
 
-1. Place all your JSON files in this directory
-2. Each file should contain excuses for one situation
-3. Update `index.ts` to import and register all files
-4. The system will automatically handle both single objects `{}` and arrays `[]`
+1. **Import**: The `data/excuses/index.ts` file imports `master-excuses.json`
+2. **Process**: It processes all excuses and organizes them by situation
+3. **Filter**: When a user generates an excuse, it filters by situation, tone, and length
+4. **Random**: It picks a random excuse from the filtered results
+5. **Fallback**: If no local excuse matches, it falls back to AI generation
 
-## Tone & Length Mapping
+## 📊 Statistics
 
-The system automatically maps your simplified values to the display format:
+The app tracks:
+- Total number of situations
+- Total number of excuses
+- Excuses per situation
+- Excuses per tone
+- Excuses per length
 
-**Tone Mapping:**
-- `believable` → "Believable"
-- `absurd` → "Absurd"
-- `dramatic` → "Dramatic"
-- `mysterious` → "Mysterious"
-- `technical` → "Technical Jargon"
-- `detailed` → "Overly Detailed"
+You can view these stats in the app console when it loads.
 
-**Length Mapping:**
-- `short` → "Quick one-liner"
-- `medium` → "Short paragraph"
-- `long` → "Elaborate story"
+## 🐛 Troubleshooting
 
-This means you can use the simple lowercase values in your JSON files, and they'll display correctly in the app!
+**Problem: App shows "No excuses found"**
+- Check that `master-excuses.json` has valid JSON syntax
+- Verify situation names match exactly (case-sensitive)
+- Check the console for error messages
+
+**Problem: Excuses not filtering correctly**
+- Verify tone and length values match the expected format
+- Check for typos in tone/length values
+- The system is case-insensitive for filtering
+
+**Problem: JSON syntax errors**
+- Use a JSON validator (like jsonlint.com) to check your file
+- Ensure all strings are in double quotes
+- Check for missing commas between objects
+- Verify all brackets are properly closed
+
+## 💡 Tips
+
+- **Backup**: Keep a backup of your master JSON file before pasting
+- **Validate**: Use a JSON validator to ensure your file is valid
+- **Test**: After importing, test a few situations to verify everything works
+- **Console**: Check the browser/app console for detailed loading logs
+
+## 🎯 Next Steps
+
+After importing your master file:
+
+1. The app will use local excuses by default
+2. Users can toggle between local and AI-generated excuses
+3. The app will show how many excuses are available
+4. All 25,962 excuses will be instantly accessible offline!
+
+---
+
+**Need help?** Check the console logs for detailed information about what's being loaded.
