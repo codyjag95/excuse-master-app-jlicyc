@@ -1,33 +1,23 @@
 
 [
   {
-    "excuse": "My computer gained sentience and refused to save my work until I agreed to its demands for better cooling.",
-    "believabilityRating": 10,
-    "tone": "Absurd",
-    "length": "Short paragraph"
+    "situation": "missed-deadline",
+    "tone": "believable",
+    "length": "short",
+    "excuse": "My laptop crashed and I lost all my work right before the deadline."
   },
   {
-    "excuse": "I was abducted by aliens who needed my expertise on Earth culture. They just dropped me off.",
-    "believabilityRating": 5,
-    "tone": "Absurd",
-    "length": "Quick one-liner"
+    "situation": "missed-deadline",
+    "tone": "technical",
+    "length": "medium",
+    "excuse": "There was a critical system failure in the cloud infrastructure that prevented me from accessing my files.",
+    "believabilityRating": 55
   },
   {
-    "excuse": "My hard drive crashed and I lost everything. I'm currently recovering the files.",
-    "believabilityRating": 75,
-    "tone": "Believable",
-    "length": "Quick one-liner"
-  },
-  {
-    "excuse": "I had a family emergency that required my immediate attention.",
-    "believabilityRating": 85,
-    "tone": "Believable",
-    "length": "Quick one-liner"
-  },
-  {
-    "excuse": "The cloud storage service experienced a catastrophic failure, resulting in data loss across multiple availability zones.",
-    "believabilityRating": 60,
-    "tone": "Technical Jargon",
-    "length": "Short paragraph"
+    "situation": "missed-deadline",
+    "tone": "absurd",
+    "length": "short",
+    "excuse": "A time traveler from the future told me the deadline was actually next week.",
+    "believabilityRating": 5
   }
 ]

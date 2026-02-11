@@ -1,33 +1,23 @@
 
 [
   {
-    "excuse": "I was planning a surprise party but the venue cancelled last minute.",
-    "believabilityRating": 55,
-    "tone": "Believable",
-    "length": "Quick one-liner"
+    "situation": "forgot-birthday",
+    "tone": "believable",
+    "length": "short",
+    "excuse": "I've been so overwhelmed with work that I completely lost track of the date."
   },
   {
-    "excuse": "Time travelers from the future told me your birthday was next week. I trusted them.",
-    "believabilityRating": 8,
-    "tone": "Absurd",
-    "length": "Short paragraph"
+    "situation": "forgot-birthday",
+    "tone": "dramatic",
+    "length": "medium",
+    "excuse": "I was planning an elaborate surprise but everything fell apart at the last minute and I panicked.",
+    "believabilityRating": 50
   },
   {
-    "excuse": "I've been in a coma for the past week and just woke up.",
-    "believabilityRating": 20,
-    "tone": "Dramatic",
-    "length": "Quick one-liner"
-  },
-  {
-    "excuse": "My calendar app had a critical bug that shifted all dates by exactly one week.",
-    "believabilityRating": 40,
-    "tone": "Technical Jargon",
-    "length": "Short paragraph"
-  },
-  {
-    "excuse": "I was kidnapped by birthday clowns who held me hostage until I agreed to join their circus.",
-    "believabilityRating": 12,
-    "tone": "Absurd",
-    "length": "Elaborate story"
+    "situation": "forgot-birthday",
+    "tone": "mysterious",
+    "length": "short",
+    "excuse": "Something came up that I can't really talk about right now.",
+    "believabilityRating": 60
   }
 ]
